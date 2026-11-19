@@ -1,0 +1,2007 @@
+<!doctype html>
+<html lang="ja">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <meta name="color-scheme" content="light dark" />
+    <link rel="icon" href="data:," />
+    <title>スマホプロジェクションマッピング</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;500;700&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet" />
+    <style>
+      button, [role="button"], select, summary, input:not([type="checkbox"], [type="radio"]) { min-height: 2rem; }
+      * { box-sizing: border-box; }
+      html, body { height: 100%; }
+      body { margin: 0; }
+
+      :root {
+        --bg: #f4f2ed;
+        --chrome: #eceae4;
+        --chrome-border: #d8d4c9;
+        --ink: #23211c;
+        --ink-dim: #6d675c;
+        --accent: #e07b1f;
+        --accent-ink: #ffffff;
+        --stage: #0a0a0c;
+        --pin: #f59e0b;
+        --btn-bg: #ffffff;
+        --btn-border: #cfccc2;
+        --btn-ink: #23211c;
+        --toggle-on-bg: #23211c;
+        --toggle-on-ink: #f5f2ea;
+        --error: #b3261e;
+      }
+      @media (prefers-color-scheme: dark) {
+        :root {
+          --bg: #171713;
+          --chrome: #1e1e1a;
+          --chrome-border: #33322b;
+          --ink: #ece9e0;
+          --ink-dim: #9b968a;
+          --accent: #f08c1e;
+          --btn-bg: #26261f;
+          --btn-border: #3d3c33;
+          --btn-ink: #ece9e0;
+          --toggle-on-bg: #ece9e0;
+          --toggle-on-ink: #1c1c18;
+          --error: #ff9d94;
+        }
+      }
+
+      body {
+        font-family: "Noto Sans JP", "Hiragino Kaku Gothic ProN", sans-serif;
+        background: var(--bg);
+        color: var(--ink);
+        display: flex;
+        flex-direction: column;
+        height: 100dvh;
+        overflow: hidden;
+        -webkit-tap-highlight-color: transparent;
+      }
+
+      /* ---------- toolbars ---------- */
+      .toolbar {
+        background: var(--chrome);
+        border-color: var(--chrome-border);
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        padding: 10px 14px;
+        flex-wrap: wrap;
+        z-index: 20;
+      }
+      .toolbar.top {
+        border-bottom: 1px solid var(--chrome-border);
+        padding-top: calc(10px + env(safe-area-inset-top, 0px));
+      }
+      .toolbar.bottom {
+        border-top: 1px solid var(--chrome-border);
+        /* Keep the controls clear of the Android 3-button navigation bar
+           (and gesture bar / home indicator) at the screen edge. */
+        padding-bottom: calc(14px + env(safe-area-inset-bottom, 0px));
+      }
+
+      .step-label {
+        font-family: "IBM Plex Mono", monospace;
+        font-size: 11px;
+        letter-spacing: .08em;
+        color: var(--ink-dim);
+        text-transform: uppercase;
+        white-space: nowrap;
+      }
+      .media-name {
+        font-size: 13px;
+        color: var(--ink-dim);
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        max-width: 38vw;
+      }
+      .spacer { flex: 1; }
+
+      .btn {
+        appearance: none;
+        border: 1px solid var(--btn-border);
+        background: var(--btn-bg);
+        color: var(--btn-ink);
+        font: inherit;
+        font-size: 14px;
+        font-weight: 500;
+        border-radius: 8px;
+        padding: 8px 14px;
+        min-height: 40px;
+        cursor: pointer;
+        display: inline-flex;
+        align-items: center;
+        gap: 7px;
+        white-space: nowrap;
+      }
+      .btn:active { transform: translateY(1px); }
+      .btn svg { width: 16px; height: 16px; flex: none; }
+      .btn.primary {
+        background: var(--accent);
+        border-color: var(--accent);
+        color: var(--accent-ink);
+        font-weight: 700;
+        padding: 8px 20px;
+      }
+      .btn.toggle[aria-pressed="true"] {
+        background: var(--toggle-on-bg);
+        color: var(--toggle-on-ink);
+        border-color: var(--toggle-on-bg);
+      }
+      /* The file input must stay RENDERED (not display:none / hidden):
+         several Android in-app WebViews silently ignore click() on a
+         display:none input, so the picker never opened and no error
+         ever appeared. A 1px, nearly transparent, non-interactive input
+         keeps the programmatic open working there. */
+      .file-proxy {
+        position: fixed;
+        left: 6px;
+        bottom: 6px;
+        width: 1px;
+        height: 1px;
+        min-height: 0;
+        opacity: 0.01;
+        pointer-events: none;
+        border: none;
+        padding: 0;
+      }
+      #addStatus {
+        display: none;
+        background: var(--chrome);
+        color: var(--ink);
+        border-bottom: 1px solid var(--chrome-border);
+        font-size: 12.5px;
+        line-height: 1.55;
+        padding: 7px 14px;
+        z-index: 20;
+        overflow-wrap: anywhere;
+      }
+      #addStatus.show { display: block; }
+      #addStatus.error { color: var(--error); font-weight: 700; }
+
+      .slider-group {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        font-size: 13px;
+        color: var(--ink-dim);
+        white-space: nowrap;
+      }
+      .slider-group output {
+        font-family: "IBM Plex Mono", monospace;
+        font-size: 12px;
+        min-width: 3.2em;
+        text-align: right;
+        color: var(--ink);
+      }
+      input[type="range"] {
+        width: 130px;
+        accent-color: var(--accent);
+        min-height: 40px;
+        cursor: pointer;
+      }
+
+      /* ---------- media library strip ---------- */
+      #mediaStrip {
+        background: var(--chrome);
+        border-bottom: 1px solid var(--chrome-border);
+        padding: 8px 12px;
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        z-index: 20;
+      }
+      #mediaStrip .strip-label {
+        font-family: "IBM Plex Mono", monospace;
+        font-size: 11px;
+        letter-spacing: .06em;
+        color: var(--ink-dim);
+        white-space: nowrap;
+      }
+      #mediaList {
+        display: flex;
+        gap: 8px;
+        overflow-x: auto;
+        overflow-y: hidden;
+        flex: 1;
+        min-width: 0;
+        padding: 2px;
+        -webkit-overflow-scrolling: touch;
+        scrollbar-width: thin;
+      }
+      .media-item {
+        display: inline-flex;
+        align-items: stretch;
+        flex: none;
+        border: 1.5px solid var(--btn-border);
+        background: var(--btn-bg);
+        border-radius: 10px;
+        overflow: hidden;
+        max-width: 220px;
+      }
+      .media-item.active {
+        border-color: var(--accent);
+        box-shadow: 0 0 0 1px var(--accent);
+      }
+      .media-main {
+        appearance: none;
+        border: none;
+        background: transparent;
+        color: var(--btn-ink);
+        font: inherit;
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+        padding: 4px 4px 4px 4px;
+        cursor: pointer;
+        min-height: 44px;
+        min-width: 0;
+        text-align: left;
+      }
+      .media-thumb {
+        width: 54px; height: 36px;
+        border-radius: 6px;
+        object-fit: cover;
+        background: #111;
+        flex: none;
+        display: block;
+      }
+      .media-thumb-demo {
+        background:
+          linear-gradient(to right, #d9481f 0 50%, #1f9d63 50% 100%) top / 100% 50% no-repeat,
+          linear-gradient(to right, #e0a81c 0 50%, #1f5fd9 50% 100%) bottom / 100% 50% no-repeat;
+        border: 1px solid rgba(255,255,255,.5);
+      }
+      .media-meta { min-width: 0; display: flex; flex-direction: column; gap: 1px; }
+      .media-title {
+        font-size: 12.5px; font-weight: 600; line-height: 1.25;
+        white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 118px;
+      }
+      .media-kind { font-size: 11px; color: var(--ink-dim); line-height: 1.2; white-space: nowrap; }
+      .media-item.active .media-kind { color: var(--accent); font-weight: 700; }
+      .media-del {
+        appearance: none; border: none; border-left: 1px solid var(--btn-border);
+        background: transparent; color: var(--ink-dim);
+        width: 30px; min-height: 44px; cursor: pointer; font-size: 16px; line-height: 1;
+        display: inline-flex; align-items: center; justify-content: center; flex: none;
+      }
+      .media-del:active { background: rgba(0,0,0,.08); }
+      .media-vis {
+        appearance: none; border: none; border-left: 1px solid var(--btn-border);
+        background: transparent; color: var(--ink-dim);
+        width: 34px; min-height: 44px; cursor: pointer;
+        display: inline-flex; align-items: center; justify-content: center; flex: none;
+      }
+      .media-vis svg { width: 17px; height: 17px; }
+      .media-vis.on { color: var(--accent); }
+      .media-vis:active { background: rgba(0,0,0,.08); }
+      .media-item.is-hidden .media-main { opacity: .5; }
+      #mediaCount { font-size: 12px; color: var(--ink-dim); white-space: nowrap; }
+
+      /* ---------- stage ---------- */
+      #stageWrap {
+        position: relative;
+        flex: 1;
+        background: var(--stage);
+        overflow: hidden;
+        min-height: 0;
+      }
+      canvas#gl {
+        position: absolute;
+        inset: 0;
+        width: 100%;
+        height: 100%;
+        display: block;
+        touch-action: none;
+      }
+      svg#outline {
+        position: absolute;
+        inset: 0;
+        width: 100%;
+        height: 100%;
+        pointer-events: none;
+      }
+      svg#outline polygon {
+        fill: rgba(245, 158, 11, 0.06);
+        stroke: var(--pin);
+        stroke-width: 1.5;
+        stroke-dasharray: 7 5;
+      }
+      svg#outline polygon.other {
+        fill: rgba(255, 255, 255, 0.03);
+        stroke: rgba(255, 255, 255, 0.6);
+        stroke-width: 1;
+        stroke-dasharray: 4 4;
+      }
+      .pin {
+        position: absolute;
+        width: 48px;
+        height: 48px;
+        margin: -24px 0 0 -24px;
+        border: none;
+        background: transparent;
+        cursor: grab;
+        touch-action: none;
+        padding: 0;
+        z-index: 5;
+      }
+      .pin::before {
+        content: "";
+        position: absolute;
+        left: 50%; top: 50%;
+        width: 20px; height: 20px;
+        margin: -10px 0 0 -10px;
+        border-radius: 50%;
+        background: var(--pin);
+        border: 3px solid #fff;
+        box-shadow: 0 1px 6px rgba(0,0,0,.55);
+        transition: transform .12s ease;
+      }
+      .pin::after {
+        content: "";
+        position: absolute;
+        left: 50%; top: 50%;
+        width: 4px; height: 4px;
+        margin: -2px 0 0 -2px;
+        border-radius: 50%;
+        background: #fff;
+      }
+      .pin:active { cursor: grabbing; }
+      .pin.selected::before { transform: scale(1.3); }
+      .pin .pin-tag {
+        position: absolute;
+        left: 50%;
+        bottom: calc(100% - 6px);
+        transform: translateX(-50%);
+        font-family: "IBM Plex Mono", monospace;
+        font-size: 10px;
+        color: #ffd9a0;
+        background: rgba(0,0,0,.55);
+        padding: 1px 5px;
+        border-radius: 4px;
+        pointer-events: none;
+        white-space: nowrap;
+      }
+
+      #stageHint {
+        position: absolute;
+        left: 50%;
+        bottom: 14px;
+        transform: translateX(-50%);
+        background: rgba(12,12,14,.72);
+        color: #e8e4d8;
+        font-size: 12.5px;
+        padding: 7px 14px;
+        border-radius: 999px;
+        pointer-events: none;
+        text-align: center;
+        line-height: 1.5;
+        max-width: calc(100% - 24px);
+        z-index: 4;
+      }
+      #glError {
+        position: absolute;
+        inset: 0;
+        display: none;
+        place-items: center;
+        color: #e8e4d8;
+        font-size: 14px;
+        padding: 24px;
+        text-align: center;
+        z-index: 6;
+      }
+
+      /* ---------- projection mode ---------- */
+      body.projecting .toolbar,
+      body.projecting #mediaStrip,
+      body.projecting #projectStrip,
+      body.projecting #addStatus,
+      body.projecting .pin,
+      body.projecting svg#outline,
+      body.projecting #stageHint { display: none; }
+      body.projecting #stageWrap { background: #000; }
+      /* Projection fills the screen with position:fixed instead of the
+         Fullscreen API: on Android the fullscreen transition can lose the
+         WebGL context (and on some devices it never comes back, leaving a
+         permanently black screen), and an element outside the fullscreen
+         subtree is not rendered at all. Fixed positioning keeps the same
+         canvas and the same GL context throughout. */
+      body.projecting #stageWrap {
+        position: fixed;
+        inset: 0;
+        z-index: 100;
+      }
+
+      #exitChip {
+        display: none;
+        /* Lives INSIDE #stageWrap so it can appear while projecting. It is
+           a hint, not a button: it never receives taps. */
+        position: absolute;
+        left: 50%;
+        bottom: max(22px, env(safe-area-inset-bottom));
+        transform: translateX(-50%);
+        z-index: 50;
+        transition: opacity .45s ease;
+        background: rgba(20,20,22,.85);
+        color: #f2efe6;
+        border: 1px solid rgba(255,255,255,.25);
+        font: inherit;
+        font-size: 14px;
+        font-weight: 500;
+        border-radius: 999px;
+        padding: 10px 22px;
+        min-height: 44px;
+        pointer-events: none;
+        white-space: nowrap;
+      }
+      /* While projecting there is no exit button on screen. A short hint
+         appears when projection starts, then fades out completely.
+         Double-tapping the stage is how you get back to the editor. */
+      body.projecting #exitChip { display: block; opacity: 1; }
+      body.projecting #exitChip.gone { opacity: 0; }
+
+      /* ---------- project strip & sheet ---------- */
+      #projectStrip {
+        background: var(--chrome);
+        border-bottom: 1px solid var(--chrome-border);
+        padding: 6px 12px;
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        flex-wrap: wrap;
+        z-index: 20;
+      }
+      .sheet-file-row { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 10px; }
+      .sheet-file-row .btn { flex: 1 1 160px; justify-content: center; min-height: 44px; }
+      .sheet-file-row .btn[disabled] { opacity: .55; cursor: wait; }
+      #projectStrip .strip-label {
+        font-family: "IBM Plex Mono", monospace;
+        font-size: 11px;
+        letter-spacing: .06em;
+        color: var(--ink-dim);
+        white-space: nowrap;
+      }
+      #projectName {
+        font-size: 13px;
+        font-weight: 600;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        min-width: 0;
+      }
+      #projectStrip .btn { min-height: 36px; padding: 6px 13px; font-size: 13px; }
+
+      #projectSheet { position: fixed; inset: 0; z-index: 200; }
+      #projectSheet[hidden] { display: none; }
+      .sheet-backdrop {
+        position: absolute; inset: 0;
+        background: rgba(8, 8, 10, .62);
+      }
+      .sheet-panel {
+        position: absolute;
+        left: 50%; bottom: 0;
+        transform: translateX(-50%);
+        width: min(620px, 100%);
+        max-height: 88dvh;
+        overflow-y: auto;
+        background: var(--bg);
+        color: var(--ink);
+        border-radius: 16px 16px 0 0;
+        padding: 18px 18px calc(20px + env(safe-area-inset-bottom, 0px));
+        box-shadow: 0 -8px 40px rgba(0,0,0,.4);
+      }
+      @media (min-width: 700px) {
+        .sheet-panel { bottom: auto; top: 50%; transform: translate(-50%, -50%); border-radius: 16px; }
+      }
+      .sheet-head { display: flex; align-items: center; gap: 10px; margin-bottom: 12px; }
+      .sheet-head h2 { font-size: 17px; margin: 0; flex: 1; }
+      .sheet-close {
+        appearance: none; border: 1px solid var(--btn-border); background: var(--btn-bg);
+        color: var(--btn-ink); width: 38px; height: 38px; border-radius: 8px;
+        font-size: 19px; line-height: 1; cursor: pointer; flex: none;
+      }
+      .sheet-label { display: block; font-size: 13px; font-weight: 600; margin-bottom: 7px; }
+      .sheet-save-row { display: flex; gap: 8px; }
+      .sheet-save-row input {
+        flex: 1; min-width: 0;
+        font: inherit; font-size: 15px;
+        padding: 9px 12px; min-height: 44px;
+        border: 1px solid var(--btn-border); border-radius: 8px;
+        background: var(--btn-bg); color: var(--btn-ink);
+      }
+      .sheet-note { font-size: 12px; color: var(--ink-dim); line-height: 1.6; margin: 9px 0 0; }
+      .sheet-actions { margin-top: 14px; }
+      .sheet-sub { font-size: 13.5px; margin: 20px 0 8px; }
+      .project-row {
+        display: flex; align-items: center; gap: 10px;
+        border: 1px solid var(--btn-border); border-radius: 10px;
+        background: var(--btn-bg);
+        padding: 9px 10px 9px 13px; margin-bottom: 8px;
+      }
+      .project-row.current { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent); }
+      .project-meta { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 1px; }
+      .project-title { font-size: 14px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+      .project-sub { font-size: 11.5px; color: var(--ink-dim); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+      .project-row .btn { min-height: 38px; padding: 6px 12px; font-size: 13px; flex: none; }
+      .btn.danger-armed { background: var(--error); border-color: var(--error); color: #fff; font-weight: 700; }
+
+      @media (max-width: 560px) {
+        .media-name { display: none; }
+        .version-label { display: none; }
+        input[type="range"] { width: 92px; }
+        .toolbar { gap: 8px; padding: 8px 10px; }
+        .toolbar.top { padding-top: calc(8px + env(safe-area-inset-top, 0px)); }
+        .toolbar.bottom { padding-bottom: calc(12px + env(safe-area-inset-bottom, 0px)); }
+        .btn { padding: 8px 11px; font-size: 13.5px; }
+        .btn.primary { padding: 8px 16px; }
+      }
+    </style>
+  </head>
+  <body>
+    <header class="toolbar top">
+      <span class="step-label">1 · 素材</span>
+      <button class="btn" id="addBtn" type="button">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+        素材を追加
+      </button>
+      <button class="btn" id="demoBtn" type="button">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/></svg>
+        デモパターン
+      </button>
+      <span class="media-name" id="mediaName">デモパターン（内蔵）</span>
+      <span class="spacer"></span>
+      <span class="step-label version-label">v1 プロトタイプ</span>
+    </header>
+
+    <div id="mediaStrip" aria-label="素材リスト">
+      <span class="strip-label">素材リスト</span>
+      <div id="mediaList" role="listbox" aria-label="追加した素材"></div>
+      <span id="mediaCount">1点</span>
+    </div>
+
+    <div id="projectStrip" aria-label="プロジェクト">
+      <span class="strip-label">プロジェクト</span>
+      <span id="projectName">新規プロジェクト</span>
+      <span class="spacer"></span>
+      <button class="btn" id="saveBtn" type="button">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg>
+        保存
+      </button>
+      <button class="btn" id="projectListBtn" type="button">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg>
+        一覧
+      </button>
+      <button class="btn" id="fileBtn" type="button">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+        ファイル
+      </button>
+    </div>
+
+    <div id="addStatus" role="status" aria-live="polite"></div>
+
+    <main id="stageWrap">
+      <canvas id="gl"></canvas>
+      <svg id="outline" aria-hidden="true"><g id="outlineOthers"></g><polygon id="outlinePoly" points="" /></svg>
+      <button class="pin" type="button" data-i="0" aria-label="左上のピン"><span class="pin-tag">左上</span></button>
+      <button class="pin" type="button" data-i="1" aria-label="右上のピン"><span class="pin-tag">右上</span></button>
+      <button class="pin" type="button" data-i="2" aria-label="右下のピン"><span class="pin-tag">右下</span></button>
+      <button class="pin" type="button" data-i="3" aria-label="左下のピン"><span class="pin-tag">左下</span></button>
+      <div id="stageHint">素材リストで選んだ素材の四隅ピンをドラッグして、投影したい形の角に合わせてください（表示中の素材は同時に映ります）</div>
+      <div id="glError">このブラウザでは WebGL が使えないため、映像を表示できません。</div>
+      <div id="exitChip" role="status">ダブルタップで編集画面に戻ります</div>
+    </main>
+
+    <footer class="toolbar bottom">
+      <span class="step-label">2 · 調整</span>
+      <button class="btn toggle" id="gridBtn" type="button" aria-pressed="true">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><line x1="3" y1="9" x2="21" y2="9"/><line x1="3" y1="15" x2="21" y2="15"/><line x1="9" y1="3" x2="9" y2="21"/><line x1="15" y1="3" x2="15" y2="21"/></svg>
+        グリッド
+      </button>
+      <div class="slider-group">
+        <label for="brightRange">明るさ</label>
+        <input type="range" id="brightRange" min="20" max="200" value="100" />
+        <output id="brightOut" for="brightRange">100%</output>
+      </div>
+      <button class="btn" id="resetBtn" type="button">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 12a9 9 0 1 0 3-6.7L3 8"/><path d="M3 3v5h5"/></svg>
+        ピンをリセット
+      </button>
+      <span class="spacer"></span>
+      <button class="btn primary" id="projectBtn" type="button">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polygon points="6 3 20 12 6 21 6 3" fill="currentColor" stroke="none"/></svg>
+        投影モード
+      </button>
+    </footer>
+
+    <div id="projectSheet" hidden>
+      <div class="sheet-backdrop" id="sheetBackdrop"></div>
+      <div class="sheet-panel" role="dialog" aria-modal="true" aria-labelledby="sheetTitle">
+        <div class="sheet-head">
+          <h2 id="sheetTitle">プロジェクト</h2>
+          <button class="sheet-close" id="sheetClose" type="button" aria-label="閉じる">×</button>
+        </div>
+        <label class="sheet-label" for="projNameInput">名前を付けて、今の状態を保存</label>
+        <div class="sheet-save-row">
+          <input type="text" id="projNameInput" placeholder="プロジェクト名" maxlength="60" autocomplete="off" />
+          <button class="btn primary" id="sheetSaveBtn" type="button">保存する</button>
+        </div>
+        <p class="sheet-note">素材の実データ・四隅の位置・表示 ON/OFF・重ね順・明るさをまとめて、この端末のブラウザ（Chrome）の中に保存します。大きな動画は保存容量を多く使います。作業中の状態は自動でも保存され、開き直すと復元されます。</p>
+        <h3 class="sheet-sub">ファイルへの保存・読み込み</h3>
+        <p class="sheet-note" style="margin-top:0">プロジェクトを1つのファイル（.pmproj.json）に書き出せます。素材の実データも含まれるため、動画があるとファイルは大きくなります。書き出したファイルは別の端末・ブラウザでも読み込めます（例：AndroidのChromeで作って、iPadのSafariで開く）。読み込むと、今の作業内容はそのファイルの内容に置き換わります。</p>
+        <div class="sheet-file-row">
+          <button class="btn" id="exportFileBtn" type="button">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+            ファイルに書き出す
+          </button>
+          <button class="btn" id="importFileBtn" type="button">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+            ファイルから読み込む
+          </button>
+        </div>
+        <p class="sheet-note" id="fileOpNote" role="status" aria-live="polite"></p>
+        <div class="sheet-actions">
+          <button class="btn" id="newProjectBtn" type="button">新規プロジェクト（素材と配置をリセット）</button>
+        </div>
+        <h3 class="sheet-sub">保存済みプロジェクト</h3>
+        <div id="projectList"></div>
+        <p id="projectEmpty" class="sheet-note">まだ保存されたプロジェクトはありません。</p>
+      </div>
+    </div>
+
+    <script>
+      (function () {
+        "use strict";
+
+        var stageWrap = document.getElementById("stageWrap");
+        var canvas = document.getElementById("gl");
+        var outlinePoly = document.getElementById("outlinePoly");
+        var outlineOthers = document.getElementById("outlineOthers");
+        var pinEls = Array.prototype.slice.call(document.querySelectorAll(".pin"));
+        var mediaName = document.getElementById("mediaName");
+        var hint = document.getElementById("stageHint");
+
+        /* ---------- state ---------- */
+        // Pin positions as fractions of the PROJECTION SCREEN — the whole
+        // viewport, which is exactly what the stage covers while projecting
+        // (position:fixed; inset:0). Order: TL, TR, BR, BL.
+        // They are deliberately NOT fractions of the editor stage: the
+        // stage grows when the toolbars hide for projection, so stage
+        // fractions would land at different absolute positions and the
+        // quad would shift/stretch between editing and projecting. The
+        // editor converts screen fractions to stage-local pixels when
+        // drawing (see pinStagePx), so what you align is what projects.
+        var DEFAULT_PINS = [
+          { x: 0.10, y: 0.30 },
+          { x: 0.90, y: 0.28 },
+          { x: 0.94, y: 0.72 },
+          { x: 0.06, y: 0.70 }
+        ];
+        // Every material owns its own four corners, so several materials
+        // can be on stage at once, each warped onto a different face of
+        // the target. New materials start slightly inset from the base
+        // quad so their corners do not sit exactly on top of an existing
+        // material's corners.
+        function makeDefaultPins(n) {
+          var off = (n % 4) * 0.055;
+          return [
+            { x: DEFAULT_PINS[0].x + off, y: DEFAULT_PINS[0].y + off * 0.5 },
+            { x: DEFAULT_PINS[1].x - off, y: DEFAULT_PINS[1].y + off * 0.5 },
+            { x: DEFAULT_PINS[2].x - off, y: DEFAULT_PINS[2].y - off * 0.5 },
+            { x: DEFAULT_PINS[3].x + off, y: DEFAULT_PINS[3].y - off * 0.5 }
+          ];
+        }
+        // `pins` always points at the SELECTED material's corner array,
+        // so the drag / keyboard / reset code below edits whichever
+        // material is selected in the list.
+        var pins = null;
+        var brightness = 1.0;
+        var gridOn = true;
+        var projecting = false;
+        var selectedPin = 0;
+
+        var stageW = 1, stageH = 1, stageLeft = 0, stageTop = 0;
+        var screenW = 1, screenH = 1;
+
+        /* ---------- media library (multiple items, layered) ---------- */
+        // Each item: { id, kind:'demo'|'video'|'image', name, el, url,
+        //              pins:[{x,y}×4], visible:bool }
+        // Items stay alive for the whole session so toggling never loses
+        // a previously added file. Every VISIBLE item is drawn at once,
+        // in list order (later items on top), each warped by its own
+        // four corners; visible videos all play at the same time. The
+        // SELECTED item (activeItem) is the one whose corner pins are
+        // shown for editing. Nothing is persisted — closing the page
+        // clears the list (files live only as object URLs in memory).
+        var demoCanvas = document.createElement("canvas");
+        demoCanvas.width = 640; demoCanvas.height = 360;
+
+        var mediaListEl = document.getElementById("mediaList");
+        var mediaCountEl = document.getElementById("mediaCount");
+        var mediaItems = [];
+        var activeItem = null;
+        var nextMediaId = 1;
+
+        var demoItem = { id: 0, kind: "demo", name: "デモパターン（内蔵）", el: demoCanvas, url: null, blob: null, bytes: 0, pins: makeDefaultPins(0), visible: true, _tex: null, _texDirty: true };
+        mediaItems.push(demoItem);
+        activeItem = demoItem;
+        pins = demoItem.pins;
+
+        function kindLabel(kind) {
+          return kind === "video" ? "動画" : kind === "image" ? "画像" : "内蔵";
+        }
+        // HTMLMediaElement.play() returns a Promise in modern browsers
+        // but undefined in older Android WebViews. Calling .catch() on
+        // that undefined threw a TypeError inside setActiveItem BEFORE
+        // renderMediaList() ran — the file was in the array but the list
+        // UI never updated, so adding a video looked like nothing
+        // happened. Always go through this guard.
+        function safePlay(el) {
+          try {
+            var p = el.play();
+            if (p && typeof p.catch === "function") p.catch(function () {});
+          } catch (e) {}
+        }
+        var EYE_ON = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7-10-7-10-7Z"/><circle cx="12" cy="12" r="3"/></svg>';
+        var EYE_OFF = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9.9 4.24A9.5 9.5 0 0 1 12 4c6.5 0 10 8 10 8a13.2 13.2 0 0 1-1.67 2.68"/><path d="M6.61 6.61A13.5 13.5 0 0 0 2 12s3.5 8 10 8a9.7 9.7 0 0 0 5.39-1.61"/><line x1="2" y1="2" x2="22" y2="22"/><path d="M9.88 9.88a3 3 0 1 0 4.24 4.24"/></svg>';
+        function renderMediaList() {
+          mediaListEl.innerHTML = "";
+          mediaItems.forEach(function (item) {
+            var wrap = document.createElement("div");
+            wrap.className = "media-item" + (item === activeItem ? " active" : "") + (item.visible ? "" : " is-hidden");
+            wrap.setAttribute("role", "option");
+            wrap.setAttribute("aria-selected", item === activeItem ? "true" : "false");
+
+            var main = document.createElement("button");
+            main.type = "button";
+            main.className = "media-main";
+            main.setAttribute("aria-label", item.name + " を選択して四隅を編集");
+
+            if (item.kind === "demo") {
+              var th = document.createElement("span");
+              th.className = "media-thumb media-thumb-demo";
+              th.setAttribute("aria-hidden", "true");
+              main.appendChild(th);
+            } else if (item.kind === "image") {
+              var im = document.createElement("img");
+              im.className = "media-thumb"; im.src = item.url; im.alt = "";
+              main.appendChild(im);
+            } else {
+              var vd = document.createElement("video");
+              vd.className = "media-thumb"; vd.src = item.url;
+              vd.muted = true; vd.setAttribute("playsinline", ""); vd.preload = "metadata";
+              main.appendChild(vd);
+            }
+
+            var meta = document.createElement("span"); meta.className = "media-meta";
+            var title = document.createElement("span"); title.className = "media-title"; title.textContent = item.name;
+            var kind = document.createElement("span"); kind.className = "media-kind";
+            kind.textContent = (item === activeItem ? "● 編集中 · " : "") + (item.visible ? "表示中 · " : "非表示 · ") + (item.failed ? "読み込み失敗 · " : "") + kindLabel(item.kind) + (item.sizeLabel ? " · " + item.sizeLabel : "");
+            meta.appendChild(title); meta.appendChild(kind);
+            main.appendChild(meta);
+            main.addEventListener("click", function () { setActiveItem(item); });
+            wrap.appendChild(main);
+
+            var vis = document.createElement("button");
+            vis.type = "button";
+            vis.className = "media-vis" + (item.visible ? " on" : "");
+            vis.innerHTML = item.visible ? EYE_ON : EYE_OFF;
+            vis.setAttribute("aria-label", item.name + (item.visible ? " を非表示にする" : " を表示する"));
+            vis.setAttribute("aria-pressed", item.visible ? "true" : "false");
+            vis.addEventListener("click", function (ev) { ev.stopPropagation(); toggleVisible(item); });
+            wrap.appendChild(vis);
+
+            if (item.kind !== "demo") {
+              var del = document.createElement("button");
+              del.type = "button"; del.className = "media-del"; del.textContent = "×";
+              del.setAttribute("aria-label", item.name + " を削除");
+              del.addEventListener("click", function (ev) { ev.stopPropagation(); removeItem(item); });
+              wrap.appendChild(del);
+            }
+            mediaListEl.appendChild(wrap);
+          });
+          var visCount = mediaItems.filter(function (it) { return it.visible; }).length;
+          mediaCountEl.textContent = mediaItems.length + "点・表示 " + visCount + "点";
+        }
+        // Selecting a material makes it the one whose corner pins are
+        // edited, and brings it on stage if it was hidden. Other visible
+        // materials keep showing (and their videos keep playing).
+        function setActiveItem(item) {
+          activeItem = item;
+          pins = item.pins;
+          if (!item.visible) item.visible = true;
+          if (item.kind === "video") safePlay(item.el);
+          item._texDirty = true;
+          mediaName.textContent = item.name;
+          layoutPins();
+          renderMediaList();
+          scheduleAutosave();
+        }
+        function toggleVisible(item) {
+          item.visible = !item.visible;
+          if (item.kind === "video") {
+            if (item.visible) safePlay(item.el);
+            else { try { item.el.pause(); } catch (e) {} }
+          }
+          if (item.visible) item._texDirty = true;
+          layoutPins();
+          renderMediaList();
+          scheduleAutosave();
+        }
+        function removeItem(item) {
+          var idx = mediaItems.indexOf(item);
+          if (idx < 0) return;
+          var wasActive = item === activeItem;
+          if (item.kind === "video") { try { item.el.pause(); item.el.removeAttribute("src"); item.el.load(); } catch (e) {} }
+          if (item._tex) { try { gl.deleteTexture(item._tex); } catch (e) {} item._tex = null; }
+          if (item.url) URL.revokeObjectURL(item.url);
+          mediaItems.splice(idx, 1);
+          if (wasActive) {
+            var next = mediaItems[Math.min(idx, mediaItems.length - 1)] || demoItem;
+            setActiveItem(next);
+          } else {
+            layoutPins();
+            renderMediaList();
+          }
+          scheduleAutosave();
+        }
+
+        /* ---------- WebGL setup ---------- */
+        var gl = canvas.getContext("webgl", { alpha: false, antialias: true }) ||
+                 canvas.getContext("experimental-webgl");
+        if (!gl) {
+          document.getElementById("glError").style.display = "grid";
+          return;
+        }
+        var derivExt = gl.getExtension("OES_standard_derivatives");
+
+        function compile(type, src) {
+          var sh = gl.createShader(type);
+          gl.shaderSource(sh, src);
+          gl.compileShader(sh);
+          return sh;
+        }
+        var vsSrc = [
+          "attribute vec2 aPos;",
+          "uniform vec2 uRes;",
+          "uniform mat3 uM;",
+          "varying vec3 vT;",
+          "void main() {",
+          "  vT = uM * vec3(aPos, 1.0);",
+          "  vec2 ndc = vec2(aPos.x / uRes.x * 2.0 - 1.0, 1.0 - aPos.y / uRes.y * 2.0);",
+          "  gl_Position = vec4(ndc, 0.0, 1.0);",
+          "}"
+        ].join("\n");
+        var fsSrc = [
+          derivExt ? "#extension GL_OES_standard_derivatives : enable" : "",
+          "precision mediump float;",
+          "varying vec3 vT;",
+          "uniform sampler2D uTex;",
+          "uniform float uBrightness;",
+          "uniform float uGrid;",
+          "void main() {",
+          "  vec2 uv = vT.xy / vT.z;",
+          "  if (uv.x < 0.0 || uv.x > 1.0 || uv.y < 0.0 || uv.y > 1.0) {",
+          "    gl_FragColor = vec4(0.0, 0.0, 0.0, 1.0);",
+          "    return;",
+          "  }",
+          "  vec4 c = texture2D(uTex, uv);",
+          "  c.rgb *= uBrightness;",
+          derivExt ?
+          "  if (uGrid > 0.5) {" +
+          "    vec2 gp = uv * 10.0;" +
+          "    vec2 gd = abs(fract(gp - 0.5) - 0.5) / fwidth(gp);" +
+          "    float line = 1.0 - min(min(gd.x, gd.y), 1.0);" +
+          "    c.rgb = mix(c.rgb, vec3(1.0), line * 0.38);" +
+          "  }" : "",
+          "  gl_FragColor = vec4(c.rgb, 1.0);",
+          "}"
+        ].join("\n");
+
+        // All GL objects are (re)created by initGL() so the renderer can
+        // recover when the context is lost — which commonly happens on
+        // Android when entering/leaving fullscreen. Without recovery the
+        // canvas stays black forever and projection looks "frozen".
+        // Each material gets its own texture (item._tex), created lazily
+        // by getTex() and dropped here on context restore.
+        var prog, aPos, uRes, uM, uTex, uBrightness, uGrid, posBuf, idxBuf;
+        function getTex(item) {
+          if (!item._tex) {
+            var t = gl.createTexture();
+            gl.bindTexture(gl.TEXTURE_2D, t);
+            gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+            gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+            gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+            gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+            item._tex = t;
+            item._texDirty = true;
+          }
+          return item._tex;
+        }
+        function initGL() {
+          prog = gl.createProgram();
+          gl.attachShader(prog, compile(gl.VERTEX_SHADER, vsSrc));
+          gl.attachShader(prog, compile(gl.FRAGMENT_SHADER, fsSrc));
+          gl.linkProgram(prog);
+          gl.useProgram(prog);
+
+          aPos = gl.getAttribLocation(prog, "aPos");
+          uRes = gl.getUniformLocation(prog, "uRes");
+          uM = gl.getUniformLocation(prog, "uM");
+          uTex = gl.getUniformLocation(prog, "uTex");
+          uBrightness = gl.getUniformLocation(prog, "uBrightness");
+          uGrid = gl.getUniformLocation(prog, "uGrid");
+
+          posBuf = gl.createBuffer();
+          gl.bindBuffer(gl.ARRAY_BUFFER, posBuf);
+          gl.enableVertexAttribArray(aPos);
+          gl.vertexAttribPointer(aPos, 2, gl.FLOAT, false, 0, 0);
+          idxBuf = gl.createBuffer();
+          gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, idxBuf);
+          gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, new Uint16Array([0, 1, 2, 0, 2, 3]), gl.STATIC_DRAW);
+
+          gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, true);
+          gl.uniform1i(uTex, 0);
+          mediaItems.forEach(function (it) { it._tex = null; it._texDirty = true; });
+        }
+        initGL();
+        canvas.addEventListener("webglcontextlost", function (e) {
+          // preventDefault() opts in to restoration; the browser fires
+          // webglcontextrestored once the GPU resources are available again.
+          e.preventDefault();
+        });
+        canvas.addEventListener("webglcontextrestored", function () {
+          initGL();
+          resize();
+        });
+
+        /* ---------- homography (dest pixels -> source uv) ---------- */
+        function solveLinear(A, b) {
+          var n = b.length;
+          for (var col = 0, row = 0; col < n && row < n; col++, row++) {
+            var piv = row;
+            for (var i = row + 1; i < n; i++) if (Math.abs(A[i][col]) > Math.abs(A[piv][col])) piv = i;
+            var tmpA = A[row]; A[row] = A[piv]; A[piv] = tmpA;
+            var tmpB = b[row]; b[row] = b[piv]; b[piv] = tmpB;
+            for (var j = row + 1; j < n; j++) {
+              var f = A[j][col] / A[row][col];
+              for (var k = col; k < n; k++) A[j][k] -= f * A[row][k];
+              b[j] -= f * b[row];
+            }
+          }
+          var x = new Array(n).fill(0);
+          for (var i = n - 1; i >= 0; i--) {
+            var s = b[i];
+            for (var j = i + 1; j < n; j++) s -= A[i][j] * x[j];
+            x[i] = s / A[i][i];
+          }
+          return x;
+        }
+        // Maps src quad -> dst quad. Returns column-major Float32Array(9) for GLSL mat3.
+        function homography(src, dst) {
+          var A = [], b = [];
+          for (var i = 0; i < 4; i++) {
+            var x = src[i].x, y = src[i].y, u = dst[i].x, v = dst[i].y;
+            A.push([x, y, 1, 0, 0, 0, -u * x, -u * y]); b.push(u);
+            A.push([0, 0, 0, x, y, 1, -v * x, -v * y]); b.push(v);
+          }
+          var h = solveLinear(A, b);
+          return new Float32Array([h[0], h[3], h[6], h[1], h[4], h[7], h[2], h[5], 1]);
+        }
+        // uv corners for TL, TR, BR, BL (v = 1 is the top of the image with FLIP_Y)
+        var UV_CORNERS = [
+          { x: 0, y: 1 }, { x: 1, y: 1 }, { x: 1, y: 0 }, { x: 0, y: 0 }
+        ];
+
+        /* ---------- demo pattern ---------- */
+        function drawDemo(t) {
+          var ctx = demoCanvas.getContext("2d");
+          var W = demoCanvas.width, H = demoCanvas.height;
+          var quads = ["#d9481f", "#1f9d63", "#1f5fd9", "#e0a81c"];
+          ctx.fillStyle = quads[0]; ctx.fillRect(0, 0, W / 2, H / 2);
+          ctx.fillStyle = quads[1]; ctx.fillRect(W / 2, 0, W / 2, H / 2);
+          ctx.fillStyle = quads[2]; ctx.fillRect(W / 2, H / 2, W / 2, H / 2);
+          ctx.fillStyle = quads[3]; ctx.fillRect(0, H / 2, W / 2, H / 2);
+          // grid
+          ctx.strokeStyle = "rgba(255,255,255,0.35)"; ctx.lineWidth = 1;
+          ctx.beginPath();
+          for (var gx = 40; gx < W; gx += 40) { ctx.moveTo(gx, 0); ctx.lineTo(gx, H); }
+          for (var gy = 40; gy < H; gy += 40) { ctx.moveTo(0, gy); ctx.lineTo(W, gy); }
+          ctx.stroke();
+          // moving sweep
+          var sx = ((t / 2400) % 1) * (W + 160) - 80;
+          var grad = ctx.createLinearGradient(sx - 70, 0, sx + 70, 0);
+          grad.addColorStop(0, "rgba(255,255,255,0)");
+          grad.addColorStop(0.5, "rgba(255,255,255,0.28)");
+          grad.addColorStop(1, "rgba(255,255,255,0)");
+          ctx.fillStyle = grad; ctx.fillRect(sx - 70, 0, 140, H);
+          // center marks
+          var pulse = 34 + Math.sin(t / 500) * 7;
+          ctx.strokeStyle = "#ffffff"; ctx.lineWidth = 4;
+          ctx.beginPath(); ctx.arc(W / 2, H / 2, pulse, 0, Math.PI * 2); ctx.stroke();
+          ctx.beginPath();
+          ctx.moveTo(W / 2 - 60, H / 2); ctx.lineTo(W / 2 + 60, H / 2);
+          ctx.moveTo(W / 2, H / 2 - 60); ctx.lineTo(W / 2, H / 2 + 60);
+          ctx.stroke();
+          // frame + orientation labels
+          ctx.strokeStyle = "#ffffff"; ctx.lineWidth = 8; ctx.strokeRect(4, 4, W - 8, H - 8);
+          ctx.fillStyle = "#ffffff";
+          ctx.font = "700 26px 'Noto Sans JP', sans-serif";
+          ctx.textAlign = "center"; ctx.textBaseline = "middle";
+          ctx.fillText("▲ TOP", W / 2, 30);
+          ctx.font = "700 22px 'IBM Plex Mono', monospace";
+          ctx.textAlign = "left"; ctx.fillText("1", 18, 24);
+          ctx.textAlign = "right"; ctx.fillText("2", W - 18, 24);
+          ctx.fillText("3", W - 18, H - 24);
+          ctx.textAlign = "left"; ctx.fillText("4", 18, H - 24);
+        }
+
+        /* ---------- layout / pins ---------- */
+        // Screen fraction -> stage-local pixels. While projecting the
+        // stage sits at 0,0 with the viewport's size, so this conversion
+        // is the identity there and the quad renders exactly where the
+        // pins say on the screen.
+        function pinStagePx(p) {
+          return { x: p.x * screenW - stageLeft, y: p.y * screenH - stageTop };
+        }
+        function quadPoints(itemPins) {
+          return itemPins.map(function (p) {
+            var q = pinStagePx(p);
+            return q.x.toFixed(1) + "," + q.y.toFixed(1);
+          }).join(" ");
+        }
+        function layoutPins() {
+          if (!pins) return;
+          // The corner pins belong to the selected material, and only
+          // while it is on stage. Other visible materials get a faint
+          // outline so their placement stays readable without a second
+          // set of draggable handles crowding the stage.
+          var showPins = !!(activeItem && activeItem.visible && !activeItem.failed);
+          for (var i = 0; i < 4; i++) {
+            var px = pinStagePx(pins[i]);
+            pinEls[i].style.left = px.x + "px";
+            pinEls[i].style.top = px.y + "px";
+            pinEls[i].style.display = showPins ? "" : "none";
+          }
+          outlinePoly.setAttribute("points", showPins ? quadPoints(pins) : "");
+          outlineOthers.innerHTML = "";
+          mediaItems.forEach(function (item) {
+            if (item === activeItem || !item.visible || item.failed) return;
+            var poly = document.createElementNS("http://www.w3.org/2000/svg", "polygon");
+            poly.setAttribute("points", quadPoints(item.pins));
+            poly.setAttribute("class", "other");
+            outlineOthers.appendChild(poly);
+          });
+        }
+        function resize() {
+          var r = stageWrap.getBoundingClientRect();
+          stageLeft = r.left; stageTop = r.top;
+          stageW = Math.max(1, r.width); stageH = Math.max(1, r.height);
+          // The projection screen is the full viewport: while projecting,
+          // the stage is fixed at inset:0, i.e. this size at position 0,0.
+          screenW = Math.max(1, window.innerWidth);
+          screenH = Math.max(1, window.innerHeight);
+          var dpr = Math.min(window.devicePixelRatio || 1, 2);
+          canvas.width = Math.round(stageW * dpr);
+          canvas.height = Math.round(stageH * dpr);
+          gl.viewport(0, 0, canvas.width, canvas.height);
+          layoutPins();
+        }
+        if (window.ResizeObserver) new ResizeObserver(resize).observe(stageWrap);
+        window.addEventListener("resize", resize);
+
+        /* ---------- pin dragging ---------- */
+        var dragging = -1;
+        pinEls.forEach(function (el) {
+          var i = parseInt(el.getAttribute("data-i"), 10);
+          el.addEventListener("pointerdown", function (e) {
+            dragging = i; selectedPin = i;
+            el.setPointerCapture(e.pointerId);
+            markSelected();
+            e.preventDefault();
+          });
+          el.addEventListener("pointermove", function (e) {
+            if (dragging !== i) return;
+            // Pointer client coords are screen coords: store the pin as a
+            // fraction of the screen so it projects at this exact spot.
+            // Clamp to the stage rect so the pin stays visible and
+            // grabbable while editing (the toolbar strips are not part of
+            // the editable preview).
+            var r = stageWrap.getBoundingClientRect();
+            var cx = Math.min(r.right, Math.max(r.left, e.clientX));
+            var cy = Math.min(r.bottom, Math.max(r.top, e.clientY));
+            pins[i].x = cx / screenW;
+            pins[i].y = cy / screenH;
+            layoutPins();
+          });
+          el.addEventListener("pointerup", function () { dragging = -1; scheduleAutosave(); });
+          el.addEventListener("pointercancel", function () { dragging = -1; scheduleAutosave(); });
+          el.addEventListener("focus", function () { selectedPin = i; markSelected(); });
+        });
+        function markSelected() {
+          pinEls.forEach(function (el, j) {
+            el.classList.toggle("selected", j === selectedPin);
+          });
+        }
+        markSelected();
+
+        document.addEventListener("keydown", function (e) {
+          if (projecting) {
+            if (e.key === "Escape") exitProjection();
+            return;
+          }
+          // Typing in a text field (e.g. the project name input) must not
+          // nudge pins with the arrow keys.
+          if (e.target && (e.target.tagName === "INPUT" || e.target.tagName === "TEXTAREA")) return;
+          if (e.key.indexOf("Arrow") === 0) {
+            // Nudge in screen pixels, clamped to the stage like dragging.
+            var stepPx = e.shiftKey ? 10 : 2;
+            var p = pins[selectedPin];
+            var cx = p.x * screenW, cy = p.y * screenH;
+            if (e.key === "ArrowLeft") cx -= stepPx;
+            if (e.key === "ArrowRight") cx += stepPx;
+            if (e.key === "ArrowUp") cy -= stepPx;
+            if (e.key === "ArrowDown") cy += stepPx;
+            var r = stageWrap.getBoundingClientRect();
+            cx = Math.min(r.right, Math.max(r.left, cx));
+            cy = Math.min(r.bottom, Math.max(r.top, cy));
+            p.x = cx / screenW;
+            p.y = cy / screenH;
+            layoutPins();
+            scheduleAutosave();
+            e.preventDefault();
+          }
+        });
+
+        /* ---------- render loop ---------- */
+        function uploadTexture(item) {
+          if (!item || !item.el) return;
+          gl.bindTexture(gl.TEXTURE_2D, getTex(item));
+          try {
+            gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, item.el);
+          } catch (err) { /* source not ready yet */ }
+        }
+        function frame(t) {
+          if (gl.isContextLost()) { requestAnimationFrame(frame); return; }
+          if (projecting) gl.clearColor(0, 0, 0, 1);
+          else gl.clearColor(0.04, 0.04, 0.05, 1);
+          gl.clear(gl.COLOR_BUFFER_BIT);
+
+          gl.uniform2f(uRes, stageW, stageH);
+          gl.uniform1f(uBrightness, brightness);
+          gl.uniform1f(uGrid, (gridOn && !projecting) ? 1 : 0);
+
+          // Draw every visible material in list order, each with its
+          // own texture and its own four-corner warp.
+          mediaItems.forEach(function (item) {
+            if (!item.visible || item.failed || !item.el) return;
+            if (item.kind === "demo") { drawDemo(t); item._texDirty = true; }
+            else if (item.kind === "video" && item.el.readyState >= 2) item._texDirty = true;
+            else if (item.kind === "image" && /\.gif$/i.test(item.name)) item._texDirty = true;
+            if (item._texDirty) { uploadTexture(item); item._texDirty = false; }
+            else gl.bindTexture(gl.TEXTURE_2D, getTex(item));
+
+            var destPx = item.pins.map(pinStagePx);
+            var m = homography(destPx, UV_CORNERS);
+            var positions = new Float32Array([
+              destPx[0].x, destPx[0].y, destPx[1].x, destPx[1].y,
+              destPx[2].x, destPx[2].y, destPx[3].x, destPx[3].y
+            ]);
+            gl.bindBuffer(gl.ARRAY_BUFFER, posBuf);
+            gl.bufferData(gl.ARRAY_BUFFER, positions, gl.DYNAMIC_DRAW);
+            gl.uniformMatrix3fv(uM, false, m);
+            gl.drawElements(gl.TRIANGLES, 6, gl.UNSIGNED_SHORT, 0);
+          });
+          requestAnimationFrame(frame);
+        }
+
+        /* ---------- add feedback ---------- */
+        // Every step of adding a file reports into this status line:
+        // picker opened, selection cancelled, per-file success (with
+        // name and size) and per-file failure. Until now a failed add
+        // produced no message at all, so there was no way to tell
+        // whether the tap, the picker or the file was at fault.
+        var addStatus = document.getElementById("addStatus");
+        var statusTimer = null;
+        function setStatus(msg, isError) {
+          addStatus.textContent = msg;
+          addStatus.classList.add("show");
+          addStatus.classList.toggle("error", !!isError);
+          if (statusTimer) clearTimeout(statusTimer);
+          statusTimer = setTimeout(function () { addStatus.classList.remove("show"); }, isError ? 14000 : 7000);
+        }
+        function formatBytes(n) {
+          if (typeof n !== "number" || !(n >= 0)) return "";
+          if (n < 1024) return n + " B";
+          if (n < 1024 * 1024) return (n / 1024).toFixed(1) + " KB";
+          if (n < 1024 * 1024 * 1024) return (n / 1048576).toFixed(1) + " MB";
+          return (n / 1073741824).toFixed(2) + " GB";
+        }
+
+        /* ---------- media loading (add multiple) ---------- */
+        // Open the chooser from a real button. The previous versions
+        // failed silently on the user's Android in-app browser: first a
+        // <label for> driving a `hidden` (display:none) input, then a
+        // permanent 1px input — the tap produced no picker, no change
+        // event and no error. Now a fresh input is created inside the
+        // tap's user gesture, appended to the document RENDERED (1px,
+        // transparent, non-interactive — see .file-proxy in the CSS,
+        // never display:none), clicked, and removed once the pick
+        // resolves. A fresh input per tap also means picking the same
+        // file twice still fires "change".
+        function discardInput(input) {
+          setTimeout(function () {
+            if (input.parentNode) input.parentNode.removeChild(input);
+          }, 400);
+        }
+        document.getElementById("addBtn").addEventListener("click", function () {
+          setStatus("ファイル選択を開いています…", false);
+          var input = document.createElement("input");
+          input.type = "file";
+          input.accept = "video/*,image/*,.mp4,.mov,.webm,.mkv,.png,.jpg,.jpeg,.gif,.webp";
+          input.multiple = true;
+          input.className = "file-proxy";
+          input.setAttribute("aria-label", "追加する動画・画像ファイル");
+          input.addEventListener("change", function () {
+            handleFileSelection(input.files);
+            discardInput(input);
+          });
+          // Fires when the picker is dismissed without a selection, so
+          // a cancelled pick is distinguishable from a broken one.
+          input.addEventListener("cancel", function () {
+            setStatus("ファイルは選択されませんでした（キャンセル）。", false);
+            discardInput(input);
+          });
+          document.body.appendChild(input);
+          try { input.click(); }
+          catch (e) {
+            discardInput(input);
+            setStatus("ファイル選択を開けませんでした。もう一度お試しください。", true);
+          }
+        });
+        // Some pickers (notably Android's) hand back files with an empty
+        // or generic MIME type. Fall back to the file extension so a
+        // video is never mistaken for an image (a video loaded as an
+        // <img> just fails silently and never appears).
+        function detectKind(file) {
+          var t = (file.type || "").toLowerCase();
+          if (t.indexOf("video/") === 0) return "video";
+          if (t.indexOf("image/") === 0) return "image";
+          var n = (file.name || "").toLowerCase();
+          if (/\.(mp4|m4v|mov|webm|mkv|avi|3gp|3gpp)$/.test(n)) return "video";
+          return "image";
+        }
+        function markFailed(item) {
+          if (item.failed) return;
+          item.failed = true;
+          layoutPins();
+          renderMediaList();
+          var msg = "「" + item.name + "」" + (item.sizeLabel ? "（" + item.sizeLabel + "）" : "") + "を読み込めませんでした。対応している動画・画像ファイルか確認してください。";
+          hint.textContent = msg;
+          setStatus(msg, true);
+        }
+        function addFile(file) {
+          var url = URL.createObjectURL(file);
+          var item;
+          if (detectKind(file) === "video") {
+            var v = document.createElement("video");
+            v.loop = true; v.muted = true; v.setAttribute("playsinline", "");
+            item = { id: nextMediaId++, kind: "video", name: file.name, el: v, url: url, blob: file, failed: false, bytes: file.size, sizeLabel: formatBytes(file.size), pins: makeDefaultPins(mediaItems.length), visible: true, _tex: null, _texDirty: true };
+            (function (it) {
+              v.addEventListener("error", function () { markFailed(it); });
+            })(item);
+            v.src = url;
+          } else {
+            var im = new Image();
+            item = { id: nextMediaId++, kind: "image", name: file.name, el: im, url: url, blob: file, failed: false, bytes: file.size, sizeLabel: formatBytes(file.size), pins: makeDefaultPins(mediaItems.length), visible: true, _tex: null, _texDirty: true };
+            (function (it) {
+              im.onload = function () { it._texDirty = true; };
+              im.addEventListener("error", function () { markFailed(it); });
+            })(item);
+            im.src = url;
+          }
+          mediaItems.push(item);
+          return item;
+        }
+        function handleFileSelection(fileList) {
+          var files = fileList ? Array.prototype.slice.call(fileList) : [];
+          if (!files.length) {
+            // The picker returned but handed over nothing (this happens
+            // with some cloud / photo pickers). Say so instead of
+            // failing silently.
+            setStatus("ファイルが渡されませんでした。端末内の「ファイル」アプリなどから直接選んでみてください。", true);
+            return;
+          }
+          var added = [], failedNames = [];
+          files.forEach(function (file) {
+            try { added.push(addFile(file)); }
+            catch (e) { failedNames.push(file.name || "名前不明のファイル"); }
+          });
+          // Render the list BEFORE activating anything: whatever happens
+          // while starting playback, the added items must be visible.
+          renderMediaList();
+          if (added.length) {
+            try { setActiveItem(added[added.length - 1]); } catch (e) { renderMediaList(); }
+            hint.textContent = added.length + "点の素材を追加しました。追加した素材は同時に表示されます。素材リストで選んだ素材の四隅をドラッグしてください";
+            // Name every added file with its size, so the result of the
+            // pick is verifiable on screen. There is no size limit in
+            // this app; only a very large video can run into the
+            // device's memory while decoding, which is called out here
+            // rather than imposed as a cap.
+            var parts = added.map(function (it) { return "「" + it.name + "」" + (it.sizeLabel ? "（" + it.sizeLabel + "）" : ""); });
+            var msg = added.length + "点の素材を追加しました：" + parts.join("、");
+            var hasHuge = added.some(function (it) { return it.bytes > 150 * 1024 * 1024; });
+            if (hasHuge) msg += "。大きな動画は端末のメモリ不足で再生できないことがあります（アプリ側にサイズ上限はありません）。";
+            setStatus(msg, false);
+          }
+          if (failedNames.length) {
+            setStatus("追加できなかったファイル：" + failedNames.join("、"), true);
+          }
+          // Keep the newly added chip visible in the strip.
+          setTimeout(function () {
+            if (mediaListEl.lastElementChild) {
+              try { mediaListEl.lastElementChild.scrollIntoView({ inline: "end", block: "nearest" }); } catch (e) {}
+            }
+          }, 30);
+          scheduleAutosave();
+        }
+        document.getElementById("demoBtn").addEventListener("click", function () {
+          setActiveItem(demoItem);
+        });
+        renderMediaList();
+
+        /* ---------- project persistence (IndexedDB) ---------- */
+        // Projects live in IndexedDB on this device/browser: each record
+        // holds the material FILES themselves (Blob) plus every item's
+        // corner pins, visibility and list order, and the global
+        // brightness / grid state. A separate autosave record mirrors
+        // the work in progress (debounced) so reopening the page
+        // restores the last state even without an explicit save.
+        // Storage is per browser: projects saved in Chrome do not show
+        // up inside the Muse in-app browser, and vice versa.
+        var DB_NAME = "pm-projection-projects";
+        var STORE_NAME = "projects";
+        var AUTOSAVE_ID = "__autosave__";
+        var dbPromise = null;
+        var currentProjectId = null;
+        var currentProjectName = null;
+        var restoring = false;
+        var autosaveTimer = null;
+
+        var projectNameEl = document.getElementById("projectName");
+        var projectSheet = document.getElementById("projectSheet");
+        var projNameInput = document.getElementById("projNameInput");
+        var projectListEl = document.getElementById("projectList");
+        var projectEmptyEl = document.getElementById("projectEmpty");
+
+        function openDB() {
+          if (dbPromise) return dbPromise;
+          dbPromise = new Promise(function (resolve, reject) {
+            if (!window.indexedDB) { reject(new Error("no-indexeddb")); return; }
+            var req = window.indexedDB.open(DB_NAME, 1);
+            req.onupgradeneeded = function () {
+              var db = req.result;
+              if (!db.objectStoreNames.contains(STORE_NAME)) db.createObjectStore(STORE_NAME, { keyPath: "id" });
+            };
+            req.onsuccess = function () { resolve(req.result); };
+            req.onerror = function () { reject(req.error || new Error("open-failed")); };
+            req.onblocked = function () { reject(new Error("blocked")); };
+          });
+          // A failed open must not poison later attempts.
+          dbPromise.catch(function () { dbPromise = null; });
+          return dbPromise;
+        }
+        function idbPut(rec) {
+          return openDB().then(function (db) {
+            return new Promise(function (resolve, reject) {
+              var tx = db.transaction(STORE_NAME, "readwrite");
+              tx.objectStore(STORE_NAME).put(rec);
+              tx.oncomplete = function () { resolve(); };
+              tx.onerror = function () { reject(tx.error || new Error("put-failed")); };
+              tx.onabort = function () { reject(tx.error || new Error("put-aborted")); };
+            });
+          });
+        }
+        function idbGet(id) {
+          return openDB().then(function (db) {
+            return new Promise(function (resolve, reject) {
+              var req = db.transaction(STORE_NAME, "readonly").objectStore(STORE_NAME).get(id);
+              req.onsuccess = function () { resolve(req.result || null); };
+              req.onerror = function () { reject(req.error || new Error("get-failed")); };
+            });
+          });
+        }
+        function idbAll() {
+          return openDB().then(function (db) {
+            return new Promise(function (resolve, reject) {
+              var req = db.transaction(STORE_NAME, "readonly").objectStore(STORE_NAME).getAll();
+              req.onsuccess = function () { resolve(req.result || []); };
+              req.onerror = function () { reject(req.error || new Error("getall-failed")); };
+            });
+          });
+        }
+        function idbDelete(id) {
+          return openDB().then(function (db) {
+            return new Promise(function (resolve, reject) {
+              var tx = db.transaction(STORE_NAME, "readwrite");
+              tx.objectStore(STORE_NAME).delete(id);
+              tx.oncomplete = function () { resolve(); };
+              tx.onerror = function () { reject(tx.error || new Error("delete-failed")); };
+            });
+          });
+        }
+
+        function clonePins(src) {
+          return (src || []).map(function (p) { return { x: p.x, y: p.y }; });
+        }
+        function collectProjectData(id, name) {
+          return {
+            id: id,
+            name: name,
+            updatedAt: Date.now(),
+            brightness: brightness,
+            gridOn: gridOn,
+            activeIndex: Math.max(0, mediaItems.indexOf(activeItem)),
+            projId: currentProjectId,
+            projName: currentProjectName,
+            items: mediaItems.map(function (it) {
+              return {
+                kind: it.kind,
+                name: it.name,
+                blob: it.kind === "demo" ? null : (it.blob || null),
+                bytes: it.bytes || (it.blob ? it.blob.size : 0),
+                pins: clonePins(it.pins),
+                visible: !!it.visible
+              };
+            })
+          };
+        }
+        // Rebuild a media item from a stored Blob, mirroring addFile()
+        // but with the saved pins / visibility instead of defaults.
+        function buildStoredItem(data) {
+          if (!data.blob) return null;
+          var url = URL.createObjectURL(data.blob);
+          var item;
+          if (data.kind === "video") {
+            var v = document.createElement("video");
+            v.loop = true; v.muted = true; v.setAttribute("playsinline", "");
+            item = { id: nextMediaId++, kind: "video", name: data.name, el: v, url: url, blob: data.blob, failed: false, bytes: data.bytes || data.blob.size, sizeLabel: formatBytes(data.bytes || data.blob.size), pins: clonePins(data.pins), visible: !!data.visible, _tex: null, _texDirty: true };
+            (function (it) { v.addEventListener("error", function () { markFailed(it); }); })(item);
+            v.src = url;
+          } else {
+            var im = new Image();
+            item = { id: nextMediaId++, kind: "image", name: data.name, el: im, url: url, blob: data.blob, failed: false, bytes: data.bytes || data.blob.size, sizeLabel: formatBytes(data.bytes || data.blob.size), pins: clonePins(data.pins), visible: !!data.visible, _tex: null, _texDirty: true };
+            (function (it) {
+              im.onload = function () { it._texDirty = true; };
+              im.addEventListener("error", function () { markFailed(it); });
+            })(item);
+            im.src = url;
+          }
+          return item;
+        }
+        function disposeItem(item) {
+          if (item.kind === "video") { try { item.el.pause(); item.el.removeAttribute("src"); item.el.load(); } catch (e) {} }
+          if (item._tex) { try { gl.deleteTexture(item._tex); } catch (e) {} item._tex = null; }
+          if (item.url) URL.revokeObjectURL(item.url);
+        }
+        function clearNonDemoItems() {
+          for (var i = mediaItems.length - 1; i >= 0; i--) {
+            if (mediaItems[i].kind !== "demo") { disposeItem(mediaItems[i]); mediaItems.splice(i, 1); }
+          }
+        }
+        // Replace the whole stage state with a stored record's state.
+        function applyProjectData(rec) {
+          if (!rec || !rec.items) return;
+          restoring = true;
+          clearNonDemoItems();
+          rec.items.forEach(function (data) {
+            if (data.kind === "demo") {
+              if (data.pins && data.pins.length === 4) demoItem.pins = clonePins(data.pins);
+              demoItem.visible = data.visible !== false;
+              demoItem._texDirty = true;
+            } else {
+              var item = buildStoredItem(data);
+              if (item) mediaItems.push(item);
+            }
+          });
+          if (typeof rec.brightness === "number") {
+            brightness = rec.brightness;
+            brightRange.value = String(Math.round(brightness * 100));
+            brightOut.textContent = brightRange.value + "%";
+          }
+          if (typeof rec.gridOn === "boolean") {
+            gridOn = rec.gridOn;
+            gridBtn.setAttribute("aria-pressed", gridOn ? "true" : "false");
+          }
+          var idx = Math.min(Math.max(0, rec.activeIndex || 0), mediaItems.length - 1);
+          activeItem = mediaItems[idx] || demoItem;
+          pins = activeItem.pins;
+          mediaItems.forEach(function (it) {
+            if (it.visible && it.kind === "video") safePlay(it.el);
+          });
+          mediaName.textContent = activeItem.name;
+          layoutPins();
+          renderMediaList();
+          restoring = false;
+        }
+
+        /* ----- autosave / restore ----- */
+        function scheduleAutosave() {
+          if (restoring) return;
+          if (autosaveTimer) clearTimeout(autosaveTimer);
+          autosaveTimer = setTimeout(saveAutosave, 1200);
+        }
+        function saveAutosave() {
+          autosaveTimer = null;
+          if (restoring) return;
+          var rec = collectProjectData(AUTOSAVE_ID, AUTOSAVE_ID);
+          idbPut(rec).catch(function () { /* storage full / unavailable: keep working in-session */ });
+        }
+        function restoreLastState() {
+          idbGet(AUTOSAVE_ID).then(function (rec) {
+            if (!rec || !rec.items || !rec.items.length) return;
+            var hasUserMedia = rec.items.some(function (d) { return d.kind !== "demo"; });
+            var demoMoved = rec.items.some(function (d) {
+              return d.kind === "demo" && d.pins && d.pins.some(function (p, i) {
+                return Math.abs(p.x - DEFAULT_PINS[i].x) > 0.001 || Math.abs(p.y - DEFAULT_PINS[i].y) > 0.001;
+              });
+            });
+            if (!hasUserMedia && !demoMoved && rec.brightness === 1 && rec.gridOn !== false) return;
+            applyProjectData(rec);
+            currentProjectId = rec.projId || null;
+            currentProjectName = rec.projName || null;
+            updateProjectLabel();
+            setStatus("前回の状態を復元しました" + (currentProjectName ? "（プロジェクト「" + currentProjectName + "」）" : "") + "。", false);
+          }).catch(function () { /* no storage: start fresh, silently */ });
+        }
+
+        /* ----- project sheet UI ----- */
+        function updateProjectLabel() {
+          projectNameEl.textContent = currentProjectName || "新規プロジェクト";
+        }
+        function formatDate(ts) {
+          try {
+            return new Date(ts).toLocaleString("ja-JP", { year: "numeric", month: "numeric", day: "numeric", hour: "2-digit", minute: "2-digit" });
+          } catch (e) { return ""; }
+        }
+        function defaultProjectName() {
+          var d = new Date();
+          function pad(n) { return (n < 10 ? "0" : "") + n; }
+          return "プロジェクト " + d.getFullYear() + "-" + pad(d.getMonth() + 1) + "-" + pad(d.getDate()) + " " + pad(d.getHours()) + ":" + pad(d.getMinutes());
+        }
+        function openSheet() {
+          projNameInput.value = currentProjectName || defaultProjectName();
+          projectSheet.hidden = false;
+          refreshProjectList();
+          setTimeout(function () { try { projNameInput.focus(); projNameInput.select(); } catch (e) {} }, 60);
+        }
+        function closeSheet() { projectSheet.hidden = true; }
+        function refreshProjectList() {
+          idbAll().then(function (recs) {
+            var list = recs.filter(function (r) { return r.id !== AUTOSAVE_ID; })
+                           .sort(function (a, b) { return (b.updatedAt || 0) - (a.updatedAt || 0); });
+            projectListEl.innerHTML = "";
+            projectEmptyEl.style.display = list.length ? "none" : "";
+            list.forEach(function (rec) {
+              var totalBytes = (rec.items || []).reduce(function (s, d) { return s + (d.bytes || 0); }, 0);
+              var row = document.createElement("div");
+              row.className = "project-row" + (rec.id === currentProjectId ? " current" : "");
+              var meta = document.createElement("div"); meta.className = "project-meta";
+              var title = document.createElement("span"); title.className = "project-title"; title.textContent = rec.name || "（無題）";
+              var sub = document.createElement("span"); sub.className = "project-sub";
+              sub.textContent = formatDate(rec.updatedAt) + " · 素材 " + (rec.items || []).length + "点" + (totalBytes ? " · " + formatBytes(totalBytes) : "") + (rec.id === currentProjectId ? " · 開いているプロジェクト" : "");
+              meta.appendChild(title); meta.appendChild(sub);
+              row.appendChild(meta);
+
+              var open = document.createElement("button");
+              open.type = "button"; open.className = "btn"; open.textContent = "開く";
+              open.addEventListener("click", function () { loadProject(rec.id); });
+              row.appendChild(open);
+
+              var del = document.createElement("button");
+              del.type = "button"; del.className = "btn"; del.textContent = "削除";
+              del.setAttribute("aria-label", "「" + (rec.name || "") + "」を削除");
+              del.addEventListener("click", function () {
+                if (del.dataset.armed === "1") {
+                  idbDelete(rec.id).then(function () {
+                    if (currentProjectId === rec.id) { currentProjectId = null; currentProjectName = null; updateProjectLabel(); }
+                    setStatus("プロジェクト「" + rec.name + "」を削除しました。", false);
+                    scheduleAutosave();
+                    refreshProjectList();
+                  }).catch(function () { setStatus("削除できませんでした。", true); });
+                } else {
+                  del.dataset.armed = "1";
+                  del.textContent = "本当に削除？";
+                  del.classList.add("danger-armed");
+                  setTimeout(function () {
+                    if (del.dataset.armed === "1") { del.dataset.armed = ""; del.textContent = "削除"; del.classList.remove("danger-armed"); }
+                  }, 3500);
+                }
+              });
+              row.appendChild(del);
+              projectListEl.appendChild(row);
+            });
+          }).catch(function () {
+            projectListEl.innerHTML = "";
+            projectEmptyEl.style.display = "";
+            projectEmptyEl.textContent = "保存先（ブラウザのストレージ）を使えないため、一覧を表示できません。Chrome で開くと保存機能が使えます。";
+          });
+        }
+        function saveProjectFromSheet() {
+          var name = (projNameInput.value || "").trim() || defaultProjectName();
+          var overwrite = !!(currentProjectId && currentProjectName === name);
+          var id = overwrite ? currentProjectId : ("p" + Date.now().toString(36) + Math.floor(Math.random() * 1e6).toString(36));
+          var rec = collectProjectData(id, name);
+          var write = overwrite
+            ? idbGet(id).then(function (old) { if (old && old.createdAt) rec.createdAt = old.createdAt; else rec.createdAt = rec.updatedAt; return idbPut(rec); })
+            : (rec.createdAt = rec.updatedAt, idbPut(rec));
+          write.then(function () {
+            currentProjectId = id;
+            currentProjectName = name;
+            updateProjectLabel();
+            closeSheet();
+            var totalBytes = rec.items.reduce(function (s, d) { return s + (d.bytes || 0); }, 0);
+            setStatus("プロジェクト「" + name + "」を保存しました（素材 " + rec.items.length + "点" + (totalBytes ? "・" + formatBytes(totalBytes) : "") + "）。", false);
+            scheduleAutosave();
+          }).catch(function () {
+            setStatus("保存できませんでした。ブラウザの空き容量が不足している可能性があります（大きな動画を減らしてからお試しください）。", true);
+          });
+        }
+        function loadProject(id) {
+          idbGet(id).then(function (rec) {
+            if (!rec) { setStatus("そのプロジェクトが見つかりませんでした。", true); refreshProjectList(); return; }
+            applyProjectData(rec);
+            currentProjectId = rec.id;
+            currentProjectName = rec.name || null;
+            updateProjectLabel();
+            closeSheet();
+            setStatus("プロジェクト「" + rec.name + "」を開きました。", false);
+            scheduleAutosave();
+          }).catch(function () { setStatus("プロジェクトを開けませんでした。", true); });
+        }
+        function newProject() {
+          restoring = true;
+          clearNonDemoItems();
+          demoItem.pins = makeDefaultPins(0);
+          demoItem.visible = true;
+          demoItem._texDirty = true;
+          brightness = 1.0;
+          brightRange.value = "100";
+          brightOut.textContent = "100%";
+          gridOn = true;
+          gridBtn.setAttribute("aria-pressed", "true");
+          activeItem = demoItem;
+          pins = demoItem.pins;
+          mediaName.textContent = demoItem.name;
+          currentProjectId = null;
+          currentProjectName = null;
+          updateProjectLabel();
+          layoutPins();
+          renderMediaList();
+          restoring = false;
+          closeSheet();
+          setStatus("新規プロジェクトにしました。", false);
+          scheduleAutosave();
+        }
+
+        /* ----- project file export / import ----- */
+        // A project file is a single JSON document (.pmproj.json):
+        // project settings plus every material's file bytes encoded as
+        // base64, so the file is self-contained and can move between
+        // devices and browsers (where IndexedDB storage cannot follow).
+        // The demo pattern has no file bytes and is stored as data:null.
+        var FILE_FORMAT = "pm-projection-project";
+        var exportFileBtn = document.getElementById("exportFileBtn");
+        var importFileBtn = document.getElementById("importFileBtn");
+        var fileOpNote = document.getElementById("fileOpNote");
+        function setFileNote(msg) { if (fileOpNote) fileOpNote.textContent = msg || ""; }
+        function sanitizeFileName(name) {
+          var s = String(name || "プロジェクト").replace(/[\\\/:*?"<>|\u0000-\u001f]/g, "_").replace(/\s+/g, " ").trim();
+          if (!s) s = "プロジェクト";
+          if (s.length > 60) s = s.slice(0, 60);
+          return s;
+        }
+        function blobToBase64(blob) {
+          if (!blob) return Promise.resolve(null);
+          if (typeof blob.arrayBuffer === "function") {
+            return blob.arrayBuffer().then(function (buf) {
+              var bytes = new Uint8Array(buf);
+              var bin = "";
+              var CHUNK = 0x8000;
+              for (var i = 0; i < bytes.length; i += CHUNK) {
+                bin += String.fromCharCode.apply(null, bytes.subarray(i, i + CHUNK));
+              }
+              return btoa(bin);
+            });
+          }
+          return new Promise(function (resolve, reject) {
+            var fr = new FileReader();
+            fr.onload = function () {
+              var s = String(fr.result || "");
+              var comma = s.indexOf(",");
+              resolve(comma >= 0 ? s.slice(comma + 1) : s);
+            };
+            fr.onerror = function () { reject(fr.error || new Error("read-failed")); };
+            fr.readAsDataURL(blob);
+          });
+        }
+        function base64ToBlob(b64, mime) {
+          var bin = atob(String(b64 || ""));
+          var bytes = new Uint8Array(bin.length);
+          for (var i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+          return new Blob([bytes], { type: mime || "" });
+        }
+        function readFileAsText(file) {
+          if (typeof file.text === "function") return file.text();
+          return new Promise(function (resolve, reject) {
+            var fr = new FileReader();
+            fr.onload = function () { resolve(String(fr.result || "")); };
+            fr.onerror = function () { reject(fr.error || new Error("read-failed")); };
+            fr.readAsText(file);
+          });
+        }
+        function exportProjectToFile() {
+          var exportName = ((projNameInput.value || "").trim() || currentProjectName || defaultProjectName());
+          var rec = collectProjectData(currentProjectId || "export", exportName);
+          exportFileBtn.disabled = true;
+          importFileBtn.disabled = true;
+          setFileNote("ファイルに書き出し中です…（素材 " + rec.items.length + "点）");
+          setStatus("プロジェクトファイルを書き出し中です…", false);
+          // Convert blobs one by one so a single failure names its file.
+          var outItems = [];
+          var chain = Promise.resolve();
+          rec.items.forEach(function (d) {
+            chain = chain.then(function () {
+              return blobToBase64(d.blob).then(function (b64) {
+                outItems.push({
+                  kind: d.kind,
+                  name: d.name,
+                  mime: d.blob ? (d.blob.type || "") : "",
+                  bytes: d.bytes || (d.blob ? d.blob.size : 0),
+                  pins: clonePins(d.pins),
+                  visible: !!d.visible,
+                  data: b64
+                });
+              });
+            });
+          });
+          chain.then(function () {
+            var payload = {
+              format: FILE_FORMAT,
+              version: 1,
+              app: "スマホプロジェクションマッピング",
+              name: exportName,
+              exportedAt: new Date().toISOString(),
+              brightness: rec.brightness,
+              gridOn: rec.gridOn,
+              activeIndex: rec.activeIndex,
+              items: outItems
+            };
+            var text = JSON.stringify(payload);
+            var outBlob = new Blob([text], { type: "application/json" });
+            var fileName = sanitizeFileName(exportName) + ".pmproj.json";
+            var dlUrl = URL.createObjectURL(outBlob);
+            var a = document.createElement("a");
+            a.href = dlUrl;
+            a.download = fileName;
+            document.body.appendChild(a);
+            try { a.click(); } finally {
+              setTimeout(function () {
+                if (a.parentNode) a.parentNode.removeChild(a);
+                URL.revokeObjectURL(dlUrl);
+              }, 600);
+            }
+            exportFileBtn.disabled = false;
+            importFileBtn.disabled = false;
+            setFileNote("「" + fileName + "」（" + formatBytes(outBlob.size) + "）を書き出しました。ダウンロード先に保存されています。");
+            setStatus("プロジェクトファイル「" + fileName + "」を書き出しました（" + formatBytes(outBlob.size) + "・素材 " + outItems.length + "点）。", false);
+          }).catch(function () {
+            exportFileBtn.disabled = false;
+            importFileBtn.disabled = false;
+            setFileNote("書き出しに失敗しました。大きな動画がある場合は、素材を減らしてからお試しください。");
+            setStatus("プロジェクトファイルの書き出しに失敗しました。大きな動画がある場合は、素材を減らしてからお試しください。", true);
+          });
+        }
+        function handleImportFile(file) {
+          if (!file) return;
+          setFileNote("「" + file.name + "」を読み込み中です…");
+          setStatus("プロジェクトファイルを読み込み中です…", false);
+          readFileAsText(file).then(function (text) {
+            var parsed;
+            try { parsed = JSON.parse(text); }
+            catch (e) { throw new Error("not-json"); }
+            if (!parsed || !Array.isArray(parsed.items) || !parsed.items.length) throw new Error("bad-format");
+            if (parsed.format && parsed.format !== FILE_FORMAT) throw new Error("bad-format");
+            // Validate and decode everything BEFORE touching the stage,
+            // so a bad file leaves the current work untouched.
+            var converted = parsed.items.map(function (d, idx) {
+              if (!d || (d.kind !== "demo" && d.kind !== "video" && d.kind !== "image")) throw new Error("bad-format");
+              var itemPins = (Array.isArray(d.pins) && d.pins.length === 4 && d.pins.every(function (p) { return p && typeof p.x === "number" && typeof p.y === "number"; }))
+                ? clonePins(d.pins) : makeDefaultPins(idx);
+              if (d.kind === "demo") {
+                return { kind: "demo", name: d.name || "デモパターン（内蔵）", blob: null, bytes: 0, pins: itemPins, visible: d.visible !== false };
+              }
+              if (typeof d.data !== "string" || !d.data) throw new Error("missing-data:" + (d.name || ""));
+              var blob = base64ToBlob(d.data, d.mime || (d.kind === "video" ? "video/mp4" : "image/png"));
+              return { kind: d.kind, name: d.name || "素材", blob: blob, bytes: typeof d.bytes === "number" ? d.bytes : blob.size, pins: itemPins, visible: d.visible !== false };
+            });
+            var rec = {
+              brightness: typeof parsed.brightness === "number" ? parsed.brightness : 1,
+              gridOn: typeof parsed.gridOn === "boolean" ? parsed.gridOn : true,
+              activeIndex: typeof parsed.activeIndex === "number" ? parsed.activeIndex : 0,
+              items: converted
+            };
+            applyProjectData(rec);
+            var importedName = (typeof parsed.name === "string" && parsed.name.trim())
+              ? parsed.name.trim()
+              : file.name.replace(/\.pmproj\.json$/i, "").replace(/\.(pmproj|json)$/i, "");
+            currentProjectId = null;
+            currentProjectName = importedName || null;
+            updateProjectLabel();
+            closeSheet();
+            var mediaCount = converted.filter(function (d) { return d.kind !== "demo"; }).length;
+            setStatus("プロジェクトファイル「" + file.name + "」を読み込みました（プロジェクト「" + (importedName || "無題") + "」・素材 " + mediaCount + "点）。この端末にも残したい場合は「保存」から保存してください。", false);
+            scheduleAutosave();
+          }).catch(function (err) {
+            var msg = (err && String(err.message || "").indexOf("missing-data:") === 0)
+              ? "ファイル内の素材「" + String(err.message).slice("missing-data:".length) + "」のデータが欠けているため、読み込めませんでした。"
+              : "そのファイルはプロジェクトファイルとして読み込めませんでした（.pmproj.json ファイルを選んでください）。今の作業内容は変更されていません。";
+            setFileNote(msg);
+            setStatus(msg, true);
+          });
+        }
+        function openImportPicker() {
+          setStatus("プロジェクトファイルの選択を開いています…", false);
+          // Same pattern as the media picker: a fresh, rendered (never
+          // display:none) input created inside the tap gesture.
+          var input = document.createElement("input");
+          input.type = "file";
+          input.accept = ".pmproj.json,.pmproj,.json,application/json";
+          input.className = "file-proxy";
+          input.setAttribute("aria-label", "読み込むプロジェクトファイル");
+          input.addEventListener("change", function () {
+            var f = input.files && input.files[0];
+            if (f) handleImportFile(f);
+            else setStatus("ファイルが渡されませんでした。端末内の「ファイル」アプリなどから直接選んでみてください。", true);
+            discardInput(input);
+          });
+          input.addEventListener("cancel", function () {
+            setStatus("プロジェクトファイルは選択されませんでした（キャンセル）。", false);
+            discardInput(input);
+          });
+          document.body.appendChild(input);
+          try { input.click(); }
+          catch (e) {
+            discardInput(input);
+            setStatus("ファイル選択を開けませんでした。もう一度お試しください。", true);
+          }
+        }
+        exportFileBtn.addEventListener("click", exportProjectToFile);
+        importFileBtn.addEventListener("click", openImportPicker);
+
+        document.getElementById("saveBtn").addEventListener("click", openSheet);
+        document.getElementById("projectListBtn").addEventListener("click", openSheet);
+        document.getElementById("fileBtn").addEventListener("click", openSheet);
+        document.getElementById("sheetClose").addEventListener("click", closeSheet);
+        document.getElementById("sheetBackdrop").addEventListener("click", closeSheet);
+        document.getElementById("sheetSaveBtn").addEventListener("click", saveProjectFromSheet);
+        projNameInput.addEventListener("keydown", function (e) { if (e.key === "Enter") { e.preventDefault(); saveProjectFromSheet(); } });
+        var newBtn = document.getElementById("newProjectBtn");
+        newBtn.addEventListener("click", function () {
+          if (newBtn.dataset.armed === "1") {
+            newBtn.dataset.armed = "";
+            newBtn.textContent = "新規プロジェクト（素材と配置をリセット）";
+            newBtn.classList.remove("danger-armed");
+            newProject();
+          } else {
+            newBtn.dataset.armed = "1";
+            newBtn.textContent = "本当にリセットしますか？（保存済みプロジェクトは残ります）";
+            newBtn.classList.add("danger-armed");
+            setTimeout(function () {
+              if (newBtn.dataset.armed === "1") { newBtn.dataset.armed = ""; newBtn.textContent = "新規プロジェクト（素材と配置をリセット）"; newBtn.classList.remove("danger-armed"); }
+            }, 4000);
+          }
+        });
+        updateProjectLabel();
+        restoreLastState();
+
+        /* ---------- controls ---------- */
+        var gridBtn = document.getElementById("gridBtn");
+        gridBtn.addEventListener("click", function () {
+          gridOn = !gridOn;
+          gridBtn.setAttribute("aria-pressed", gridOn ? "true" : "false");
+          scheduleAutosave();
+        });
+        var brightRange = document.getElementById("brightRange");
+        var brightOut = document.getElementById("brightOut");
+        brightRange.addEventListener("input", function () {
+          brightness = parseInt(brightRange.value, 10) / 100;
+          brightOut.textContent = brightRange.value + "%";
+        });
+        brightRange.addEventListener("change", function () { scheduleAutosave(); });
+        document.getElementById("resetBtn").addEventListener("click", function () {
+          // Reset only the selected material's corners, back to the
+          // default quad for its slot in the list.
+          if (activeItem) {
+            var fresh = makeDefaultPins(Math.max(0, mediaItems.indexOf(activeItem)));
+            for (var i = 0; i < 4; i++) { activeItem.pins[i].x = fresh[i].x; activeItem.pins[i].y = fresh[i].y; }
+          }
+          layoutPins();
+          scheduleAutosave();
+        });
+
+        /* ---------- projection mode ---------- */
+        var exitChip = document.getElementById("exitChip");
+        var wakeLock = null;
+        var chipTimer = null;
+
+        function showHint() {
+          exitChip.classList.remove("gone");
+          if (chipTimer) clearTimeout(chipTimer);
+          // The hint is shown only briefly when projection starts, then
+          // disappears completely so nothing overlays the picture. There
+          // is no exit button while projecting: double-tapping the stage
+          // exits (see the pointerdown handler below).
+          chipTimer = setTimeout(function () { exitChip.classList.add("gone"); }, 3000);
+        }
+        function requestWakeLock() {
+          if (navigator.wakeLock && navigator.wakeLock.request) {
+            navigator.wakeLock.request("screen").then(function (wl) { wakeLock = wl; }).catch(function () {});
+          }
+        }
+        function enterProjection() {
+          projecting = true;
+          // Every visible video plays during projection, not just the
+          // selected one.
+          mediaItems.forEach(function (it) {
+            if (it.visible && it.kind === "video") safePlay(it.el);
+          });
+          // No Fullscreen API here on purpose: the stage is stretched over
+          // the screen with position:fixed (see the CSS). The fullscreen
+          // transition on Android could lose the WebGL context and leave
+          // the projection black and unresponsive; fixed positioning never
+          // touches the GL surface, so the picture keeps rendering.
+          document.body.classList.add("projecting");
+          resize();
+          showHint();
+          requestWakeLock();
+          // Layout settles a beat after the toolbars disappear; re-fit so
+          // the canvas viewport matches the real stage size.
+          setTimeout(resize, 120);
+        }
+        function exitProjection() {
+          projecting = false;
+          document.body.classList.remove("projecting");
+          exitChip.classList.remove("gone");
+          if (chipTimer) { clearTimeout(chipTimer); chipTimer = null; }
+          if (wakeLock) { wakeLock.release().catch(function () {}); wakeLock = null; }
+          resize();
+        }
+        document.getElementById("projectBtn").addEventListener("click", enterProjection);
+        // No exit button while projecting: a double-tap anywhere on the
+        // stage returns to the editor. Single taps do nothing, so brushing
+        // the screen never drops out of projection by accident.
+        var lastTapAt = 0;
+        stageWrap.addEventListener("pointerdown", function () {
+          if (!projecting) return;
+          var now = Date.now();
+          if (now - lastTapAt < 400) {
+            lastTapAt = 0;
+            exitProjection();
+          } else {
+            lastTapAt = now;
+          }
+        });
+        document.addEventListener("visibilitychange", function () {
+          if (projecting && document.visibilityState === "visible") requestWakeLock();
+        });
+
+        /* ---------- go ---------- */
+        resize();
+        requestAnimationFrame(frame);
+      })();
+    </script>
+  </body>
+</html>
