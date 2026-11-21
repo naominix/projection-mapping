@@ -53,11 +53,71 @@
         font-family: "Noto Sans JP", "Hiragino Kaku Gothic ProN", sans-serif;
         background: var(--bg);
         color: var(--ink);
-        display: flex;
-        flex-direction: column;
         height: 100dvh;
         overflow: hidden;
         -webkit-tap-highlight-color: transparent;
+      }
+
+      /* ---------- overlay chrome ----------
+         The stage fills the whole screen at all times (see #stageWrap);
+         every control floats ON TOP of it as an overlay, so the mapping
+         area is the full screen — not just the gap between toolbars.
+         The top group (material / project strips + status line) lives in
+         one fixed wrapper so it can slide away as a unit; the bottom
+         adjustment bar is fixed separately. Hiding the UI slides both
+         out and leaves only a small "UIを表示" pill to call them back. */
+      #uiTop {
+        position: fixed;
+        top: 0; left: 0; right: 0;
+        z-index: 20;
+        display: flex;
+        flex-direction: column;
+        box-shadow: 0 6px 22px rgba(0, 0, 0, .22);
+        transition: transform .28s ease, opacity .28s ease;
+      }
+      .toolbar.bottom {
+        position: fixed;
+        left: 0; right: 0; bottom: 0;
+        z-index: 20;
+        box-shadow: 0 -6px 22px rgba(0, 0, 0, .22);
+        transition: transform .28s ease, opacity .28s ease;
+      }
+      body.ui-hidden #uiTop {
+        transform: translateY(-103%);
+        opacity: 0;
+        pointer-events: none;
+      }
+      body.ui-hidden .toolbar.bottom {
+        transform: translateY(103%);
+        opacity: 0;
+        pointer-events: none;
+      }
+      #showUiBtn {
+        display: none;
+        position: fixed;
+        top: calc(10px + env(safe-area-inset-top, 0px));
+        right: 10px;
+        z-index: 60;
+        appearance: none;
+        border: 1px solid rgba(255, 255, 255, .35);
+        background: rgba(16, 16, 18, .62);
+        color: #f2efe6;
+        font: inherit;
+        font-size: 13px;
+        font-weight: 600;
+        border-radius: 999px;
+        padding: 9px 16px;
+        min-height: 44px;
+        cursor: pointer;
+        align-items: center;
+        gap: 7px;
+        -webkit-backdrop-filter: blur(6px);
+        backdrop-filter: blur(6px);
+      }
+      #showUiBtn svg { width: 16px; height: 16px; flex: none; }
+      body.ui-hidden #showUiBtn { display: inline-flex; }
+      @media (prefers-reduced-motion: reduce) {
+        #uiTop, .toolbar.bottom { transition: none; }
       }
 
       /* ---------- toolbars ---------- */
@@ -283,11 +343,16 @@
 
       /* ---------- stage ---------- */
       #stageWrap {
-        position: relative;
-        flex: 1;
+        /* Full-screen at all times, behind the overlay chrome: pin
+           positions are screen fractions, so an always-full-screen stage
+           keeps editing coordinates identical to projection coordinates
+           and lets pins use the areas the toolbars used to occupy
+           (once the UI is hidden). */
+        position: fixed;
+        inset: 0;
+        z-index: 0;
         background: var(--stage);
         overflow: hidden;
-        min-height: 0;
       }
       canvas#gl {
         position: absolute;
@@ -369,7 +434,9 @@
       #stageHint {
         position: absolute;
         left: 50%;
-        bottom: 14px;
+        /* Sit above the overlay bottom bar while the UI is shown;
+           drop to the screen edge once it is hidden. */
+        bottom: calc(104px + env(safe-area-inset-bottom, 0px));
         transform: translateX(-50%);
         background: rgba(12,12,14,.72);
         color: #e8e4d8;
@@ -395,13 +462,17 @@
       }
 
       /* ---------- projection mode ---------- */
+      body.ui-hidden #stageHint { bottom: calc(14px + env(safe-area-inset-bottom, 0px)); }
+
       body.projecting .toolbar,
+      body.projecting #uiTop,
       body.projecting #mediaStrip,
       body.projecting #projectStrip,
       body.projecting #addStatus,
       body.projecting .pin,
       body.projecting svg#outline,
       body.projecting #stageHint { display: none; }
+      body.projecting #showUiBtn { display: none !important; }
       body.projecting #stageWrap { background: #000; }
       /* Projection fills the screen with position:fixed instead of the
          Fullscreen API: on Android the fullscreen transition can lose the
@@ -537,10 +608,25 @@
         .toolbar.bottom { padding-bottom: calc(12px + env(safe-area-inset-bottom, 0px)); }
         .btn { padding: 8px 11px; font-size: 13.5px; }
         .btn.primary { padding: 8px 16px; }
+        /* Keep the overlay compact on phones: one row per strip, so the
+           top overlay stays clear of the default quad's top pins and
+           every pin remains grabbable while the UI is shown. */
+        .step-label,
+        #mediaStrip .strip-label,
+        #projectStrip .strip-label { display: none; }
+        .toolbar.top { flex-wrap: nowrap; }
+        #hideUiBtn { font-size: 0; gap: 0; padding: 8px 10px; }
+        #hideUiBtn svg { width: 20px; height: 20px; }
+        #projectStrip { flex-wrap: nowrap; gap: 8px; padding: 6px 10px; }
+        #projectName { flex: 1 1 auto; }
+        #projectStrip .btn { flex: none; }
+        #mediaStrip { gap: 6px; padding: 8px 10px; }
+        #stageHint { bottom: calc(136px + env(safe-area-inset-bottom, 0px)); }
       }
     </style>
   </head>
   <body>
+    <div id="uiTop">
     <header class="toolbar top">
       <span class="step-label">1 · 素材</span>
       <button class="btn" id="addBtn" type="button">
@@ -553,6 +639,10 @@
       </button>
       <span class="media-name" id="mediaName">デモパターン（内蔵）</span>
       <span class="spacer"></span>
+      <button class="btn" id="hideUiBtn" type="button" aria-label="UIを隠してマッピングエリアを広げる">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9.9 4.24A9.5 9.5 0 0 1 12 4c6.5 0 10 8 10 8a13.2 13.2 0 0 1-1.67 2.68"/><path d="M6.61 6.61A13.5 13.5 0 0 0 2 12s3.5 8 10 8a9.7 9.7 0 0 0 5.39-1.61"/><line x1="2" y1="2" x2="22" y2="22"/><path d="M9.88 9.88a3 3 0 1 0 4.24 4.24"/></svg>
+        UIを隠す
+      </button>
       <span class="step-label version-label">v1 プロトタイプ</span>
     </header>
 
@@ -581,6 +671,12 @@
     </div>
 
     <div id="addStatus" role="status" aria-live="polite"></div>
+    </div>
+
+    <button id="showUiBtn" type="button" aria-label="UIを表示する">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7-10-7-10-7Z"/><circle cx="12" cy="12" r="3"/></svg>
+      UIを表示
+    </button>
 
     <main id="stageWrap">
       <canvas id="gl"></canvas>
@@ -589,12 +685,12 @@
       <button class="pin" type="button" data-i="1" aria-label="右上のピン"><span class="pin-tag">右上</span></button>
       <button class="pin" type="button" data-i="2" aria-label="右下のピン"><span class="pin-tag">右下</span></button>
       <button class="pin" type="button" data-i="3" aria-label="左下のピン"><span class="pin-tag">左下</span></button>
-      <div id="stageHint">素材リストで選んだ素材の四隅ピンをドラッグして、投影したい形の角に合わせてください（表示中の素材は同時に映ります）</div>
+      <div id="stageHint">素材リストで選んだ素材の四隅ピンをドラッグして、投影したい形の角に合わせてください（表示中の素材は同時に映ります）。「UIを隠す」で画面いっぱいに広げられます</div>
       <div id="glError">このブラウザでは WebGL が使えないため、映像を表示できません。</div>
       <div id="exitChip" role="status">ダブルタップで編集画面に戻ります</div>
     </main>
 
-    <footer class="toolbar bottom">
+    <footer class="toolbar bottom" id="bottomBar">
       <span class="step-label">2 · 調整</span>
       <button class="btn toggle" id="gridBtn" type="button" aria-pressed="true">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><line x1="3" y1="9" x2="21" y2="9"/><line x1="3" y1="15" x2="21" y2="15"/><line x1="9" y1="3" x2="9" y2="21"/><line x1="15" y1="3" x2="15" y2="21"/></svg>
@@ -1092,6 +1188,32 @@
         if (window.ResizeObserver) new ResizeObserver(resize).observe(stageWrap);
         window.addEventListener("resize", resize);
 
+        /* ---------- overlay UI show / hide ---------- */
+        // The stage is full-screen and the chrome floats over it. While
+        // the UI is shown, pin dragging is clamped to the area between
+        // the top overlay and the bottom bar so a pin can never slide
+        // underneath a bar and get lost; once the UI is hidden the clamp
+        // opens up to the whole screen, which is the extra mapping area
+        // this is for.
+        var uiTopEl = document.getElementById("uiTop");
+        var bottomBarEl = document.getElementById("bottomBar");
+        function uiHidden() { return document.body.classList.contains("ui-hidden"); }
+        function editableRect() {
+          var r = stageWrap.getBoundingClientRect();
+          if (uiHidden() || projecting) return r;
+          var top = r.top, bottom = r.bottom;
+          if (uiTopEl) top = Math.max(top, uiTopEl.getBoundingClientRect().bottom);
+          if (bottomBarEl) bottom = Math.min(bottom, bottomBarEl.getBoundingClientRect().top);
+          if (bottom - top < 80) return r;
+          return { left: r.left, right: r.right, top: top, bottom: bottom };
+        }
+        document.getElementById("hideUiBtn").addEventListener("click", function () {
+          document.body.classList.add("ui-hidden");
+        });
+        document.getElementById("showUiBtn").addEventListener("click", function () {
+          document.body.classList.remove("ui-hidden");
+        });
+
         /* ---------- pin dragging ---------- */
         var dragging = -1;
         pinEls.forEach(function (el) {
@@ -1106,10 +1228,10 @@
             if (dragging !== i) return;
             // Pointer client coords are screen coords: store the pin as a
             // fraction of the screen so it projects at this exact spot.
-            // Clamp to the stage rect so the pin stays visible and
-            // grabbable while editing (the toolbar strips are not part of
-            // the editable preview).
-            var r = stageWrap.getBoundingClientRect();
+            // Clamp to the editable rect: the whole screen while the UI
+            // is hidden, the area between the overlay bars while it is
+            // shown, so the pin stays visible and grabbable either way.
+            var r = editableRect();
             var cx = Math.min(r.right, Math.max(r.left, e.clientX));
             var cy = Math.min(r.bottom, Math.max(r.top, e.clientY));
             pins[i].x = cx / screenW;
@@ -1144,7 +1266,7 @@
             if (e.key === "ArrowRight") cx += stepPx;
             if (e.key === "ArrowUp") cy -= stepPx;
             if (e.key === "ArrowDown") cy += stepPx;
-            var r = stageWrap.getBoundingClientRect();
+            var r = editableRect();
             cx = Math.min(r.right, Math.max(r.left, cx));
             cy = Math.min(r.bottom, Math.max(r.top, cy));
             p.x = cx / screenW;
