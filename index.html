@@ -394,6 +394,39 @@
         stroke-width: 1;
         stroke-dasharray: 4 4;
       }
+      /* Letterbox frame (aspect-ratio lock): when a project made on a
+         screen with a different aspect ratio is opened, the original
+         ratio is reproduced as a centred frame and the pins live
+         inside it; everything outside the frame stays pure black
+         (no light from the projector). The box is editor-only chrome:
+         it is hidden while projecting, where the black bars are just
+         the undrawn part of the canvas. */
+      #frameBox {
+        position: absolute;
+        display: none;
+        border: 1.5px dashed rgba(255, 255, 255, 0.55);
+        pointer-events: none;
+        z-index: 3;
+      }
+      #frameBox .frame-tag {
+        position: absolute;
+        left: 8px; top: 6px;
+        font-family: "IBM Plex Mono", monospace;
+        font-size: 10.5px;
+        letter-spacing: .05em;
+        color: rgba(255, 255, 255, 0.85);
+        background: rgba(0, 0, 0, .55);
+        padding: 2px 7px;
+        border-radius: 4px;
+        white-space: nowrap;
+      }
+      body.letterbox:not(.projecting) #frameBox { display: block; }
+      #aspectInfo {
+        font-size: 11.5px;
+        color: var(--ink-dim);
+        white-space: nowrap;
+      }
+      #aspectInfo.warn { color: var(--error); font-weight: 700; }
       .pin {
         position: absolute;
         width: 48px;
@@ -680,6 +713,7 @@
     <div id="projectStrip" aria-label="プロジェクト">
       <span class="strip-label">プロジェクト</span>
       <span id="projectName">新規プロジェクト</span>
+      <span id="aspectInfo" title="プロジェクトの基準画面比率と、この端末の画面比率"></span>
       <span class="spacer"></span>
       <button class="btn" id="saveBtn" type="button">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg>
@@ -705,6 +739,7 @@
 
     <main id="stageWrap">
       <canvas id="gl"></canvas>
+      <div id="frameBox" aria-hidden="true"><span class="frame-tag" id="frameTag"></span></div>
       <svg id="outline" aria-hidden="true"><g id="outlineOthers"></g><polygon id="outlinePoly" points="" /></svg>
       <div id="pinLayer" aria-label="多角形の頂点ピン"></div>
       <div id="stageHint">選んだ素材の頂点ピンをドラッグして多角形の形に合わせてください。「頂点を追加／削除」で角の数を変えられます。多角形の外側は黒（光なし）になります。「UIを隠す」で画面いっぱいに広げられます</div>
@@ -725,6 +760,10 @@
       <button class="btn toggle" id="flipVBtn" type="button" aria-pressed="false" aria-label="投影画面全体を上下反転する">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m7 3 5 5 5-5H7"/><path d="m7 21 5-5 5 5H7"/><path d="M2 12h2"/><path d="M8 12h2"/><path d="M14 12h2"/><path d="M20 12h2"/></svg>
         上下反転
+      </button>
+      <button class="btn toggle" id="aspectBtn" type="button" aria-pressed="false" aria-label="プロジェクトの基準画面比率をこの画面の中央に黒帯付きで再現する（比率固定）">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="2" y="5" width="20" height="14" rx="2"/><rect x="6" y="8" width="12" height="8"/></svg>
+        比率固定
       </button>
       <div class="slider-group">
         <label for="brightRange">明るさ</label>
@@ -763,6 +802,11 @@
           <button class="btn primary" id="sheetSaveBtn" type="button">保存する</button>
         </div>
         <p class="sheet-note">素材の実データ・多角形の頂点位置・表示 ON/OFF・重ね順・明るさ・左右／上下反転の設定をまとめて（マスクも含みます）、この端末のブラウザ（Chrome）の中に保存します。大きな動画は保存容量を多く使います。作業中の状態は自動でも保存され、開き直すと復元されます。</p>
+        <h3 class="sheet-sub">画面比率について</h3>
+        <p class="sheet-note" style="margin-top:0" id="aspectNote">保存・書き出しのときに「作った画面の比率」も一緒に記録されます。比率の違う端末で開くと自動で「比率固定」がONになり、元の比率の枠が画面中央に黒帯付きで再現されるので、ピンの位置関係はそのまま使えます（プロジェクターは、その枠が対象物に合うように置き直してください）。下の調整バーの「比率固定」でいつでも ON／OFF できます。OFFにすると画面全体に引き伸ばされます。</p>
+        <div class="sheet-actions" style="margin-top:8px">
+          <button class="btn" id="aspectResetBtn" type="button">基準比率をこの端末の画面に合わせ直す</button>
+        </div>
         <h3 class="sheet-sub">ファイルへの保存・読み込み</h3>
         <p class="sheet-note" style="margin-top:0">プロジェクトを1つのファイル（.pmproj.json）に書き出せます。素材の実データも含まれるため、動画があるとファイルは大きくなります。書き出したファイルは別の端末・ブラウザでも読み込めます（例：AndroidのChromeで作って、iPadのSafariで開く）。読み込むと、今の作業内容はそのファイルの内容に置き換わります。</p>
         <div class="sheet-file-row">
@@ -872,6 +916,20 @@
         // all move to the mirrored position together.
         var flipH = false;
         var flipV = false;
+        // Aspect-ratio portability: pin fractions are relative to a
+        // FRAME, not directly to the physical screen. Normally the
+        // frame IS the whole screen and nothing changes. A project
+        // records the aspect ratio of the screen it was made on
+        // (projectAspect = width / height). When it is opened on a
+        // screen with a different ratio, letterbox turns on: the frame
+        // becomes the largest centred rectangle with the recorded
+        // ratio, pins keep their exact positions inside that frame,
+        // and the bars outside stay pure black (= no projector light).
+        // Turning letterbox off stretches the frame back to the full
+        // screen (the old behaviour, with the old distortion).
+        var projectAspect = null;
+        var letterbox = false;
+        var aspectNotice = "";
         var projecting = false;
         var selectedPin = 0;
 
@@ -1267,17 +1325,81 @@
         // stage sits at 0,0 with the viewport's size, so this conversion
         // is the identity there and the quad renders exactly where the
         // pins say on the screen.
+        function screenAspect() { return screenW / screenH; }
+        function aspectMismatch() {
+          if (!projectAspect) return false;
+          return Math.abs(screenAspect() - projectAspect) / projectAspect > 0.02;
+        }
+        // Same check against a not-yet-applied record's recorded ratio
+        // (used by the autosave-restore early-out, which must not skip
+        // restoring a letterboxed session just because nothing else
+        // about it looks non-default).
+        function aspectMismatchSaved(rec) {
+          if (!rec || typeof rec.aspect !== "number" || !(rec.aspect > 0)) return false;
+          return Math.abs(screenAspect() - rec.aspect) / rec.aspect > 0.02;
+        }
+        function aspectLabel(a) {
+          if (!a || !(a > 0)) return "";
+          var known = [[21, 9], [20, 9], [19.5, 9], [16, 9], [16, 10], [3, 2], [4, 3], [5, 4], [1, 1]];
+          for (var i = 0; i < known.length; i++) {
+            if (Math.abs(a - known[i][0] / known[i][1]) < 0.02) return known[i][0] + ":" + known[i][1];
+          }
+          return a.toFixed(2) + ":1";
+        }
+        // The frame pins are relative to, in screen (viewport)
+        // coordinates. Full screen unless letterbox is reproducing a
+        // recorded aspect ratio on a differently-shaped screen.
+        function frameRect() {
+          if (!letterbox || !projectAspect) return { left: 0, top: 0, width: screenW, height: screenH };
+          var sa = screenAspect();
+          var w, h;
+          if (sa > projectAspect) { h = screenH; w = h * projectAspect; }
+          else { w = screenW; h = w / projectAspect; }
+          return { left: (screenW - w) / 2, top: (screenH - h) / 2, width: w, height: h };
+        }
         function pinStagePx(p) {
+          var fr = frameRect();
           var fx = flipH ? 1 - p.x : p.x;
           var fy = flipV ? 1 - p.y : p.y;
-          return { x: fx * screenW - stageLeft, y: fy * screenH - stageTop };
+          return { x: fr.left + fx * fr.width - stageLeft, y: fr.top + fy * fr.height - stageTop };
         }
         // Inverse of pinStagePx for pointer input: a display-space
-        // client point back to a stored (un-flipped) screen fraction.
+        // client point back to a stored (un-flipped) frame fraction.
         function clientToStored(cx, cy) {
-          var fx = cx / screenW;
-          var fy = cy / screenH;
+          var fr = frameRect();
+          var fx = (cx - fr.left) / fr.width;
+          var fy = (cy - fr.top) / fr.height;
           return { x: flipH ? 1 - fx : fx, y: flipV ? 1 - fy : fy };
+        }
+        var frameBoxEl = document.getElementById("frameBox");
+        var frameTagEl = document.getElementById("frameTag");
+        var aspectInfoEl = document.getElementById("aspectInfo");
+        // Reflect the letterbox state in the body class (frame box
+        // visibility), the toggle button, the frame box geometry and
+        // the aspect readout next to the project name. Called from
+        // layoutPins() so rotation / resize keeps everything in sync.
+        function updateAspectUI() {
+          document.body.classList.toggle("letterbox", !!(letterbox && projectAspect));
+          var btn = document.getElementById("aspectBtn");
+          if (btn) btn.setAttribute("aria-pressed", letterbox ? "true" : "false");
+          if (frameBoxEl) {
+            var fr = frameRect();
+            frameBoxEl.style.left = (fr.left - stageLeft) + "px";
+            frameBoxEl.style.top = (fr.top - stageTop) + "px";
+            frameBoxEl.style.width = fr.width + "px";
+            frameBoxEl.style.height = fr.height + "px";
+            if (frameTagEl) frameTagEl.textContent = "基準比率 " + aspectLabel(projectAspect) + " の枠（外側は黒帯）";
+          }
+          if (aspectInfoEl) {
+            if (projectAspect) {
+              var warn = aspectMismatch() && !letterbox;
+              aspectInfoEl.textContent = "比率 " + aspectLabel(projectAspect) + (letterbox ? "・固定中" : "") + (aspectMismatch() ? "（この画面は " + aspectLabel(screenAspect()) + "）" : "");
+              aspectInfoEl.classList.toggle("warn", warn);
+            } else {
+              aspectInfoEl.textContent = "";
+              aspectInfoEl.classList.remove("warn");
+            }
+          }
         }
         function quadPoints(itemVerts) {
           return itemVerts.map(function (p) {
@@ -1312,6 +1434,7 @@
           markSelected();
         }
         function layoutPins() {
+          updateAspectUI();
           if (!verts) return;
           if (pinOwner !== activeItem || pinEls.length !== verts.length) rebuildPinEls();
           // The vertex pins belong to the selected material, and only
@@ -1365,12 +1488,25 @@
         function uiHidden() { return document.body.classList.contains("ui-hidden"); }
         function editableRect() {
           var r = stageWrap.getBoundingClientRect();
-          if (uiHidden() || projecting) return r;
-          var top = r.top, bottom = r.bottom;
+          // With letterbox on, pins live inside the reproduced frame:
+          // never let one slide out into the black bars, where it
+          // would be meaningless (and invisible against the black).
+          var base = { left: r.left, right: r.right, top: r.top, bottom: r.bottom };
+          if (letterbox && projectAspect) {
+            var fr = frameRect();
+            base = {
+              left: Math.max(base.left, r.left + fr.left),
+              right: Math.min(base.right, r.left + fr.left + fr.width),
+              top: Math.max(base.top, r.top + fr.top),
+              bottom: Math.min(base.bottom, r.top + fr.top + fr.height)
+            };
+          }
+          if (uiHidden() || projecting) return base;
+          var top = base.top, bottom = base.bottom;
           if (uiTopEl) top = Math.max(top, uiTopEl.getBoundingClientRect().bottom);
           if (bottomBarEl) bottom = Math.min(bottom, bottomBarEl.getBoundingClientRect().top);
-          if (bottom - top < 80) return r;
-          return { left: r.left, right: r.right, top: top, bottom: bottom };
+          if (bottom - top < 80) return base;
+          return { left: base.left, right: base.right, top: top, bottom: bottom };
         }
         document.getElementById("hideUiBtn").addEventListener("click", function () {
           document.body.classList.add("ui-hidden");
@@ -1780,6 +1916,11 @@
         }
 
         function collectProjectData(id, name) {
+          // Lock the reference ratio the first time anything is
+          // recorded: the ratio of the screen the work started on.
+          // (Without locking, a later autosave after rotating the
+          // device would silently re-base the project.)
+          if (!projectAspect) projectAspect = screenAspect();
           return {
             id: id,
             name: name,
@@ -1788,6 +1929,13 @@
             gridOn: gridOn,
             flipH: flipH,
             flipV: flipV,
+            // Record the screen ratio this project was made on. Once
+            // a project HAS a recorded ratio it keeps it (saving from
+            // a letterboxed session on another device must not
+            // overwrite the original ratio); a project without one
+            // adopts the current screen's ratio at save time.
+            aspect: projectAspect,
+            letterbox: letterbox,
             activeIndex: Math.max(0, mediaItems.indexOf(activeItem)),
             projId: currentProjectId,
             projName: currentProjectName,
@@ -1868,6 +2016,27 @@
           flipH = rec.flipH === true;
           flipV = rec.flipV === true;
           updateFlipUI();
+          // Aspect handling. Older saves have no recorded ratio: they
+          // keep behaving exactly as before (full screen) and adopt a
+          // ratio the next time they are saved. A save WITH a ratio
+          // that does not match this screen turns letterbox on by
+          // itself, so the pin layout reproduces exactly; the user is
+          // told, and can stretch to full screen with the 比率固定
+          // toggle if that is really what they want.
+          var hadAspect = typeof rec.aspect === "number" && rec.aspect > 0;
+          aspectNotice = "";
+          if (hadAspect) {
+            projectAspect = rec.aspect;
+            if (aspectMismatch()) {
+              letterbox = true;
+              // Callers append this to their own status line (theirs
+              // would otherwise overwrite it in the same tick).
+              aspectNotice = "このプロジェクトは画面比率 " + aspectLabel(projectAspect) + " で作られていて、この端末（" + aspectLabel(screenAspect()) + "）とは比率が違うため、「比率固定」をONにして元の比率の枠を中央に再現しました。枠の外は黒帯になります。画面全体に広げたいときは「比率固定」をOFFにしてください。";
+            } else {
+              letterbox = rec.letterbox === true;
+            }
+          }
+          updateAspectUI();
           var idx = Math.min(Math.max(0, rec.activeIndex || 0), mediaItems.length - 1);
           activeItem = mediaItems[idx] || demoItem;
           verts = activeItem.verts;
@@ -1904,12 +2073,12 @@
                 return !DEFAULT_PINS[i] || Math.abs(p.x - DEFAULT_PINS[i].x) > 0.001 || Math.abs(p.y - DEFAULT_PINS[i].y) > 0.001;
               });
             });
-            if (!hasUserMedia && !demoMoved && rec.brightness === 1 && rec.gridOn !== false && !rec.flipH && !rec.flipV) return;
+            if (!hasUserMedia && !demoMoved && rec.brightness === 1 && rec.gridOn !== false && !rec.flipH && !rec.flipV && !rec.letterbox && !aspectMismatchSaved(rec)) return;
             applyProjectData(rec);
             currentProjectId = rec.projId || null;
             currentProjectName = rec.projName || null;
             updateProjectLabel();
-            setStatus("前回の状態を復元しました" + (currentProjectName ? "（プロジェクト「" + currentProjectName + "」）" : "") + "。", false);
+            setStatus("前回の状態を復元しました" + (currentProjectName ? "（プロジェクト「" + currentProjectName + "」）" : "") + "。" + (aspectNotice ? " " + aspectNotice : ""), false);
           }).catch(function () { /* no storage: start fresh, silently */ });
         }
 
@@ -1947,7 +2116,7 @@
               var meta = document.createElement("div"); meta.className = "project-meta";
               var title = document.createElement("span"); title.className = "project-title"; title.textContent = rec.name || "（無題）";
               var sub = document.createElement("span"); sub.className = "project-sub";
-              sub.textContent = formatDate(rec.updatedAt) + " · 素材 " + (rec.items || []).length + "点" + (totalBytes ? " · " + formatBytes(totalBytes) : "") + (rec.id === currentProjectId ? " · 開いているプロジェクト" : "");
+              sub.textContent = formatDate(rec.updatedAt) + " · 素材 " + (rec.items || []).length + "点" + (totalBytes ? " · " + formatBytes(totalBytes) : "") + (typeof rec.aspect === "number" && rec.aspect > 0 ? " · 比率 " + aspectLabel(rec.aspect) : "") + (rec.id === currentProjectId ? " · 開いているプロジェクト" : "");
               meta.appendChild(title); meta.appendChild(sub);
               row.appendChild(meta);
 
@@ -2013,7 +2182,7 @@
             currentProjectName = rec.name || null;
             updateProjectLabel();
             closeSheet();
-            setStatus("プロジェクト「" + rec.name + "」を開きました。", false);
+            setStatus("プロジェクト「" + rec.name + "」を開きました。" + (aspectNotice ? " " + aspectNotice : ""), false);
             scheduleAutosave();
           }).catch(function () { setStatus("プロジェクトを開けませんでした。", true); });
         }
@@ -2031,6 +2200,9 @@
           flipH = false;
           flipV = false;
           updateFlipUI();
+          projectAspect = null;
+          letterbox = false;
+          updateAspectUI();
           activeItem = demoItem;
           verts = demoItem.verts;
           selectedPin = 0;
@@ -2132,7 +2304,7 @@
           chain.then(function () {
             var payload = {
               format: FILE_FORMAT,
-              version: 2,
+              version: 3,
               app: "スマホプロジェクションマッピング",
               name: exportName,
               exportedAt: new Date().toISOString(),
@@ -2140,6 +2312,8 @@
               gridOn: rec.gridOn,
               flipH: rec.flipH === true,
               flipV: rec.flipV === true,
+              aspect: rec.aspect,
+              letterbox: rec.letterbox === true,
               activeIndex: rec.activeIndex,
               items: outItems
             };
@@ -2200,6 +2374,10 @@
               gridOn: typeof parsed.gridOn === "boolean" ? parsed.gridOn : true,
               flipH: parsed.flipH === true,
               flipV: parsed.flipV === true,
+              // v1/v2 files have no recorded ratio: they import exactly
+              // as before and adopt a ratio on their next save.
+              aspect: (typeof parsed.aspect === "number" && parsed.aspect > 0) ? parsed.aspect : null,
+              letterbox: parsed.letterbox === true,
               activeIndex: typeof parsed.activeIndex === "number" ? parsed.activeIndex : 0,
               items: converted
             };
@@ -2212,7 +2390,7 @@
             updateProjectLabel();
             closeSheet();
             var mediaCount = converted.filter(function (d) { return d.kind !== "demo"; }).length;
-            setStatus("プロジェクトファイル「" + file.name + "」を読み込みました（プロジェクト「" + (importedName || "無題") + "」・素材 " + mediaCount + "点）。この端末にも残したい場合は「保存」から保存してください。", false);
+            setStatus("プロジェクトファイル「" + file.name + "」を読み込みました（プロジェクト「" + (importedName || "無題") + "」・素材 " + mediaCount + "点）。この端末にも残したい場合は「保存」から保存してください。" + (aspectNotice ? " " + aspectNotice : ""), false);
             scheduleAutosave();
           }).catch(function (err) {
             var msg = (err && String(err.message || "").indexOf("missing-data:") === 0)
@@ -2306,6 +2484,39 @@
           updateFlipUI();
           layoutPins();
           setStatus("上下反転を" + (flipV ? "ON" : "OFF") + "にしました。現在の反転：" + flipStatus(), false);
+          scheduleAutosave();
+        });
+        /* ----- aspect-ratio lock (letterbox) ----- */
+        var aspectBtn = document.getElementById("aspectBtn");
+        aspectBtn.addEventListener("click", function () {
+          if (!letterbox && !projectAspect) {
+            // First use on a project with no recorded ratio: the
+            // current screen becomes the reference ratio.
+            projectAspect = screenAspect();
+          }
+          letterbox = !letterbox;
+          updateAspectUI();
+          layoutPins();
+          if (letterbox) {
+            setStatus("比率固定をONにしました。基準比率 " + aspectLabel(projectAspect) + " の枠を画面中央に再現し、枠の外は黒帯（光なし）になります。ピンの位置関係は比率の違う端末でもそのまま再現されます。", false);
+          } else {
+            setStatus("比率固定をOFFにしました。画面全体に引き伸ばして表示します" + (aspectMismatch() ? "（基準比率 " + aspectLabel(projectAspect) + " とこの画面 " + aspectLabel(screenAspect()) + " が違うため、形は比率の分だけ歪みます）" : "") + "。", false);
+          }
+          scheduleAutosave();
+        });
+        // Re-base the project on THIS device's screen: the recorded
+        // ratio becomes the current screen's and letterbox turns off,
+        // so the project is re-authored full-screen here (pins keep
+        // their frame fractions, so they land stretched — the user
+        // re-aligns them for this device, which is the point).
+        var aspectResetBtn = document.getElementById("aspectResetBtn");
+        if (aspectResetBtn) aspectResetBtn.addEventListener("click", function () {
+          projectAspect = screenAspect();
+          letterbox = false;
+          updateAspectUI();
+          layoutPins();
+          closeSheet();
+          setStatus("基準比率をこの端末の画面（" + aspectLabel(projectAspect) + "）に合わせ直しました。比率固定はOFFです。この端末で使う前提で、ピンを合わせ直してください。", false);
           scheduleAutosave();
         });
         var brightRange = document.getElementById("brightRange");
