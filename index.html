@@ -718,6 +718,14 @@
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><line x1="3" y1="9" x2="21" y2="9"/><line x1="3" y1="15" x2="21" y2="15"/><line x1="9" y1="3" x2="9" y2="21"/><line x1="15" y1="3" x2="15" y2="21"/></svg>
         グリッド
       </button>
+      <button class="btn toggle" id="flipHBtn" type="button" aria-pressed="false" aria-label="投影画面全体を左右反転（ミラー）する">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m3 7 5 5-5 5V7"/><path d="m21 7-5 5 5 5V7"/><path d="M12 20v2"/><path d="M12 14v2"/><path d="M12 8v2"/><path d="M12 2v2"/></svg>
+        左右反転
+      </button>
+      <button class="btn toggle" id="flipVBtn" type="button" aria-pressed="false" aria-label="投影画面全体を上下反転する">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m7 3 5 5 5-5H7"/><path d="m7 21 5-5 5 5H7"/><path d="M2 12h2"/><path d="M8 12h2"/><path d="M14 12h2"/><path d="M20 12h2"/></svg>
+        上下反転
+      </button>
       <div class="slider-group">
         <label for="brightRange">明るさ</label>
         <input type="range" id="brightRange" min="20" max="200" value="100" />
@@ -754,7 +762,7 @@
           <input type="text" id="projNameInput" placeholder="プロジェクト名" maxlength="60" autocomplete="off" />
           <button class="btn primary" id="sheetSaveBtn" type="button">保存する</button>
         </div>
-        <p class="sheet-note">素材の実データ・多角形の頂点位置・表示 ON/OFF・重ね順・明るさをまとめて（マスクも含みます）、この端末のブラウザ（Chrome）の中に保存します。大きな動画は保存容量を多く使います。作業中の状態は自動でも保存され、開き直すと復元されます。</p>
+        <p class="sheet-note">素材の実データ・多角形の頂点位置・表示 ON/OFF・重ね順・明るさ・左右／上下反転の設定をまとめて（マスクも含みます）、この端末のブラウザ（Chrome）の中に保存します。大きな動画は保存容量を多く使います。作業中の状態は自動でも保存され、開き直すと復元されます。</p>
         <h3 class="sheet-sub">ファイルへの保存・読み込み</h3>
         <p class="sheet-note" style="margin-top:0">プロジェクトを1つのファイル（.pmproj.json）に書き出せます。素材の実データも含まれるため、動画があるとファイルは大きくなります。書き出したファイルは別の端末・ブラウザでも読み込めます（例：AndroidのChromeで作って、iPadのSafariで開く）。読み込むと、今の作業内容はそのファイルの内容に置き換わります。</p>
         <div class="sheet-file-row">
@@ -853,6 +861,17 @@
         var verts = null;
         var brightness = 1.0;
         var gridOn = true;
+        // Whole-screen mirror flips (projector setup, not per material):
+        // rear projection from behind a screen, reflecting off a mirror,
+        // or a ceiling-mounted projector all need the ENTIRE output
+        // mirrored — geometry positions and picture content together.
+        // Stored pin fractions stay in un-flipped content space; the
+        // flip is applied in pinStagePx() (display) and inverted in the
+        // drag / keyboard handlers (input), so editing stays WYSIWYG
+        // while a flip is on: pins, outlines and the rendered picture
+        // all move to the mirrored position together.
+        var flipH = false;
+        var flipV = false;
         var projecting = false;
         var selectedPin = 0;
 
@@ -1249,7 +1268,16 @@
         // is the identity there and the quad renders exactly where the
         // pins say on the screen.
         function pinStagePx(p) {
-          return { x: p.x * screenW - stageLeft, y: p.y * screenH - stageTop };
+          var fx = flipH ? 1 - p.x : p.x;
+          var fy = flipV ? 1 - p.y : p.y;
+          return { x: fx * screenW - stageLeft, y: fy * screenH - stageTop };
+        }
+        // Inverse of pinStagePx for pointer input: a display-space
+        // client point back to a stored (un-flipped) screen fraction.
+        function clientToStored(cx, cy) {
+          var fx = cx / screenW;
+          var fy = cy / screenH;
+          return { x: flipH ? 1 - fx : fx, y: flipV ? 1 - fy : fy };
         }
         function quadPoints(itemVerts) {
           return itemVerts.map(function (p) {
@@ -1370,8 +1398,9 @@
             var r = editableRect();
             var cx = Math.min(r.right, Math.max(r.left, e.clientX));
             var cy = Math.min(r.bottom, Math.max(r.top, e.clientY));
-            verts[i].x = cx / screenW;
-            verts[i].y = cy / screenH;
+            var st = clientToStored(cx, cy);
+            verts[i].x = st.x;
+            verts[i].y = st.y;
             layoutPins();
           });
           el.addEventListener("pointerup", function () { dragging = -1; scheduleAutosave(); });
@@ -1420,10 +1449,14 @@
           if (e.target && (e.target.tagName === "INPUT" || e.target.tagName === "TEXTAREA")) return;
           if (e.key.indexOf("Arrow") === 0) {
             if (!verts || !verts[selectedPin]) return;
-            // Nudge in screen pixels, clamped to the stage like dragging.
+            // Nudge in DISPLAY pixels (what the user sees moves in the
+            // arrow's direction even while a mirror flip is on),
+            // clamped to the stage like dragging, then converted back
+            // to stored fractions.
             var stepPx = e.shiftKey ? 10 : 2;
             var p = verts[selectedPin];
-            var cx = p.x * screenW, cy = p.y * screenH;
+            var disp = pinStagePx(p);
+            var cx = disp.x + stageLeft, cy = disp.y + stageTop;
             if (e.key === "ArrowLeft") cx -= stepPx;
             if (e.key === "ArrowRight") cx += stepPx;
             if (e.key === "ArrowUp") cy -= stepPx;
@@ -1431,8 +1464,9 @@
             var r = editableRect();
             cx = Math.min(r.right, Math.max(r.left, cx));
             cy = Math.min(r.bottom, Math.max(r.top, cy));
-            p.x = cx / screenW;
-            p.y = cy / screenH;
+            var st = clientToStored(cx, cy);
+            p.x = st.x;
+            p.y = st.y;
             layoutPins();
             scheduleAutosave();
             e.preventDefault();
@@ -1752,6 +1786,8 @@
             updatedAt: Date.now(),
             brightness: brightness,
             gridOn: gridOn,
+            flipH: flipH,
+            flipV: flipV,
             activeIndex: Math.max(0, mediaItems.indexOf(activeItem)),
             projId: currentProjectId,
             projName: currentProjectName,
@@ -1828,6 +1864,10 @@
             gridOn = rec.gridOn;
             gridBtn.setAttribute("aria-pressed", gridOn ? "true" : "false");
           }
+          // Older saves have no flip fields: they load un-flipped.
+          flipH = rec.flipH === true;
+          flipV = rec.flipV === true;
+          updateFlipUI();
           var idx = Math.min(Math.max(0, rec.activeIndex || 0), mediaItems.length - 1);
           activeItem = mediaItems[idx] || demoItem;
           verts = activeItem.verts;
@@ -1864,7 +1904,7 @@
                 return !DEFAULT_PINS[i] || Math.abs(p.x - DEFAULT_PINS[i].x) > 0.001 || Math.abs(p.y - DEFAULT_PINS[i].y) > 0.001;
               });
             });
-            if (!hasUserMedia && !demoMoved && rec.brightness === 1 && rec.gridOn !== false) return;
+            if (!hasUserMedia && !demoMoved && rec.brightness === 1 && rec.gridOn !== false && !rec.flipH && !rec.flipV) return;
             applyProjectData(rec);
             currentProjectId = rec.projId || null;
             currentProjectName = rec.projName || null;
@@ -1988,6 +2028,9 @@
           brightOut.textContent = "100%";
           gridOn = true;
           gridBtn.setAttribute("aria-pressed", "true");
+          flipH = false;
+          flipV = false;
+          updateFlipUI();
           activeItem = demoItem;
           verts = demoItem.verts;
           selectedPin = 0;
@@ -2095,6 +2138,8 @@
               exportedAt: new Date().toISOString(),
               brightness: rec.brightness,
               gridOn: rec.gridOn,
+              flipH: rec.flipH === true,
+              flipV: rec.flipV === true,
               activeIndex: rec.activeIndex,
               items: outItems
             };
@@ -2153,6 +2198,8 @@
             var rec = {
               brightness: typeof parsed.brightness === "number" ? parsed.brightness : 1,
               gridOn: typeof parsed.gridOn === "boolean" ? parsed.gridOn : true,
+              flipH: parsed.flipH === true,
+              flipV: parsed.flipV === true,
               activeIndex: typeof parsed.activeIndex === "number" ? parsed.activeIndex : 0,
               items: converted
             };
@@ -2235,6 +2282,30 @@
         gridBtn.addEventListener("click", function () {
           gridOn = !gridOn;
           gridBtn.setAttribute("aria-pressed", gridOn ? "true" : "false");
+          scheduleAutosave();
+        });
+        var flipHBtn = document.getElementById("flipHBtn");
+        var flipVBtn = document.getElementById("flipVBtn");
+        function updateFlipUI() {
+          if (flipHBtn) flipHBtn.setAttribute("aria-pressed", flipH ? "true" : "false");
+          if (flipVBtn) flipVBtn.setAttribute("aria-pressed", flipV ? "true" : "false");
+        }
+        function flipStatus() {
+          if (!flipH && !flipV) return "反転なし（通常表示）";
+          return (flipH ? "左右反転" : "") + (flipH && flipV ? "＋" : "") + (flipV ? "上下反転" : "") + " ON";
+        }
+        flipHBtn.addEventListener("click", function () {
+          flipH = !flipH;
+          updateFlipUI();
+          layoutPins();
+          setStatus("左右反転を" + (flipH ? "ON" : "OFF") + "にしました（画面全体が鏡像になります）。現在の反転：" + flipStatus(), false);
+          scheduleAutosave();
+        });
+        flipVBtn.addEventListener("click", function () {
+          flipV = !flipV;
+          updateFlipUI();
+          layoutPins();
+          setStatus("上下反転を" + (flipV ? "ON" : "OFF") + "にしました。現在の反転：" + flipStatus(), false);
           scheduleAutosave();
         });
         var brightRange = document.getElementById("brightRange");
