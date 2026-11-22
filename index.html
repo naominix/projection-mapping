@@ -487,12 +487,15 @@
       body.projecting #stageHint { display: none; }
       body.projecting #showUiBtn { display: none !important; }
       body.projecting #stageWrap { background: #000; }
-      /* Projection fills the screen with position:fixed instead of the
-         Fullscreen API: on Android the fullscreen transition can lose the
-         WebGL context (and on some devices it never comes back, leaving a
-         permanently black screen), and an element outside the fullscreen
-         subtree is not rendered at all. Fixed positioning keeps the same
-         canvas and the same GL context throughout. */
+      /* Projection fills the screen with position:fixed as the base
+         layer; on top of that, entering projection also requests the
+         Fullscreen API (see requestTrueFullscreen) so PC / Mac / Android
+         Chrome hide their browser chrome for a true full screen. The
+         fixed layer stays as the fallback for environments where the
+         API is missing or refuses (in-app browsers, iPhone Safari):
+         the same canvas keeps rendering either way, and if the
+         fullscreen transition costs the WebGL context, the
+         contextlost / contextrestored handlers rebuild it. */
       body.projecting #stageWrap {
         position: fixed;
         inset: 0;
@@ -2273,6 +2276,68 @@
             navigator.wakeLock.request("screen").then(function (wl) { wakeLock = wl; }).catch(function () {});
           }
         }
+        /* ----- true fullscreen (Fullscreen API) -----
+           The projection-start tap is a user gesture, so it can ask the
+           browser for REAL fullscreen: address bar, tabs and OS chrome
+           disappear on PC / Mac / Android Chrome. Where the API does
+           not exist or the request is refused (Muse in-app browser,
+           iPhone Safari, …) the promise just rejects and projection
+           carries on with the fixed-position full-screen stage exactly
+           as before — no error, no black screen. */
+        var fsActive = false;
+        function requestTrueFullscreen() {
+          var el = document.documentElement;
+          var req = el.requestFullscreen || el.webkitRequestFullscreen;
+          if (!req) return;
+          try {
+            var p = req.call(el, { navigationUI: "hide" });
+            if (p && typeof p.catch === "function") {
+              p.catch(function () {
+                // The options form was refused: retry once, plainly.
+                try {
+                  var p2 = req.call(el);
+                  if (p2 && typeof p2.catch === "function") p2.catch(function () {});
+                } catch (e2) { /* stay on the fixed-position stage */ }
+              });
+            }
+          } catch (e) {
+            try {
+              var p3 = req.call(el);
+              if (p3 && typeof p3.catch === "function") p3.catch(function () {});
+            } catch (e3) { /* stay on the fixed-position stage */ }
+          }
+        }
+        function exitTrueFullscreen() {
+          if (!document.fullscreenElement && !document.webkitFullscreenElement) return;
+          var ex = document.exitFullscreen || document.webkitExitFullscreen;
+          if (!ex) return;
+          try {
+            var p = ex.call(document);
+            if (p && typeof p.catch === "function") p.catch(function () {});
+          } catch (e) {}
+        }
+        function onFullscreenChange() {
+          var fsEl = document.fullscreenElement || document.webkitFullscreenElement;
+          if (fsEl) {
+            fsActive = true;
+            // The request landed after the user already left projection
+            // (slow request): never stay fullscreen in the editor.
+            if (!projecting) { exitTrueFullscreen(); return; }
+          } else {
+            var wasFs = fsActive;
+            fsActive = false;
+            // The user left fullscreen themselves (Esc / F11 / system
+            // gesture) while projecting: leave projection too, so the
+            // editor does not come back still in "projecting" state.
+            if (wasFs && projecting) { exitProjection(); return; }
+          }
+          resize();
+          // The viewport settles a beat after the transition; re-fit.
+          setTimeout(resize, 120);
+        }
+        document.addEventListener("fullscreenchange", onFullscreenChange);
+        document.addEventListener("webkitfullscreenchange", onFullscreenChange);
+
         function enterProjection() {
           projecting = true;
           // Every visible video plays during projection, not just the
@@ -2280,12 +2345,11 @@
           mediaItems.forEach(function (it) {
             if (it.visible && it.kind === "video") safePlay(it.el);
           });
-          // No Fullscreen API here on purpose: the stage is stretched over
-          // the screen with position:fixed (see the CSS). The fullscreen
-          // transition on Android could lose the WebGL context and leave
-          // the projection black and unresponsive; fixed positioning never
-          // touches the GL surface, so the picture keeps rendering.
           document.body.classList.add("projecting");
+          // Ask for true fullscreen from inside this tap gesture. If it
+          // is refused, the fixed-position stage (see the CSS) is the
+          // projection surface, exactly as in previous versions.
+          requestTrueFullscreen();
           resize();
           showHint();
           requestWakeLock();
@@ -2296,6 +2360,7 @@
         function exitProjection() {
           projecting = false;
           document.body.classList.remove("projecting");
+          exitTrueFullscreen();
           exitChip.classList.remove("gone");
           if (chipTimer) { clearTimeout(chipTimer); chipTimer = null; }
           if (wakeLock) { wakeLock.release().catch(function () {}); wakeLock = null; }
