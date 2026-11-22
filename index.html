@@ -280,7 +280,7 @@
         background: var(--btn-bg);
         border-radius: 10px;
         overflow: hidden;
-        max-width: 220px;
+        max-width: 264px;
       }
       .media-item.active {
         border-color: var(--accent);
@@ -351,6 +351,20 @@
       .media-vis svg { width: 17px; height: 17px; }
       .media-vis.on { color: var(--accent); }
       .media-vis:active { background: rgba(0,0,0,.08); }
+      /* Layer-order (stacking) controls: the list order IS the draw
+         order — earlier chips are drawn first (further back), later
+         chips on top. These buttons move an item one step toward the
+         back (‹) or toward the front (›). */
+      .media-move {
+        appearance: none; border: none; border-left: 1px solid var(--btn-border);
+        background: transparent; color: var(--ink-dim);
+        width: 28px; min-height: 44px; cursor: pointer; padding: 0;
+        display: inline-flex; align-items: center; justify-content: center; flex: none;
+      }
+      .media-move svg { width: 15px; height: 15px; }
+      .media-move:active { background: rgba(0,0,0,.08); }
+      .media-move[disabled] { opacity: .28; cursor: default; }
+      .media-move[disabled]:active { background: transparent; }
       .media-item.is-hidden .media-main { opacity: .5; }
       #mediaCount { font-size: 12px; color: var(--ink-dim); white-space: nowrap; }
 
@@ -981,9 +995,11 @@
         }
         var EYE_ON = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7-10-7-10-7Z"/><circle cx="12" cy="12" r="3"/></svg>';
         var EYE_OFF = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9.9 4.24A9.5 9.5 0 0 1 12 4c6.5 0 10 8 10 8a13.2 13.2 0 0 1-1.67 2.68"/><path d="M6.61 6.61A13.5 13.5 0 0 0 2 12s3.5 8 10 8a9.7 9.7 0 0 0 5.39-1.61"/><line x1="2" y1="2" x2="22" y2="22"/><path d="M9.88 9.88a3 3 0 1 0 4.24 4.24"/></svg>';
+        var CHEV_L = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m15 18-6-6 6-6"/></svg>';
+        var CHEV_R = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m9 18 6-6-6-6"/></svg>';
         function renderMediaList() {
           mediaListEl.innerHTML = "";
-          mediaItems.forEach(function (item) {
+          mediaItems.forEach(function (item, idx) {
             var wrap = document.createElement("div");
             wrap.className = "media-item" + (item === activeItem ? " active" : "") + (item.visible ? "" : " is-hidden");
             wrap.setAttribute("role", "option");
@@ -1018,11 +1034,35 @@
             var meta = document.createElement("span"); meta.className = "media-meta";
             var title = document.createElement("span"); title.className = "media-title"; title.textContent = item.name;
             var kind = document.createElement("span"); kind.className = "media-kind";
-            kind.textContent = (item === activeItem ? "● 編集中 · " : "") + (item.visible ? "表示中 · " : "非表示 · ") + (item.failed ? "読み込み失敗 · " : "") + kindLabel(item.kind) + (item.sizeLabel ? " · " + item.sizeLabel : "");
+            kind.textContent = (item === activeItem ? "● 編集中 · " : "") + (item.visible ? "表示中 · " : "非表示 · ") + (item.failed ? "読み込み失敗 · " : "") + kindLabel(item.kind) + " · 重ね順 " + (idx + 1) + "/" + mediaItems.length + (item.sizeLabel ? " · " + item.sizeLabel : "");
             meta.appendChild(title); meta.appendChild(kind);
             main.appendChild(meta);
             main.addEventListener("click", function () { setActiveItem(item); });
             wrap.appendChild(main);
+
+            // Stacking order = list order: the leftmost chip is the
+            // back layer, the rightmost is the front. ‹ moves this
+            // item one step toward the back, › one step toward the
+            // front; the end buttons disable at the extremes.
+            var mvBack = document.createElement("button");
+            mvBack.type = "button";
+            mvBack.className = "media-move";
+            mvBack.innerHTML = CHEV_L;
+            mvBack.title = "背面へ（重ね順を1つ下げる）";
+            mvBack.setAttribute("aria-label", item.name + " を背面へ移動（重ね順を1つ下げる）");
+            if (idx === 0) mvBack.disabled = true;
+            mvBack.addEventListener("click", function (ev) { ev.stopPropagation(); moveItem(item, -1); });
+            wrap.appendChild(mvBack);
+
+            var mvFront = document.createElement("button");
+            mvFront.type = "button";
+            mvFront.className = "media-move";
+            mvFront.innerHTML = CHEV_R;
+            mvFront.title = "前面へ（重ね順を1つ上げる）";
+            mvFront.setAttribute("aria-label", item.name + " を前面へ移動（重ね順を1つ上げる）");
+            if (idx === mediaItems.length - 1) mvFront.disabled = true;
+            mvFront.addEventListener("click", function (ev) { ev.stopPropagation(); moveItem(item, 1); });
+            wrap.appendChild(mvFront);
 
             var vis = document.createElement("button");
             vis.type = "button";
@@ -1071,6 +1111,24 @@
           renderMediaList();
           scheduleAutosave();
         }
+        // Change the stacking (display) order: swap the item one step
+        // in the list. Rendering, outlines and every save format all
+        // follow mediaItems order, so this single reorder is all it
+        // takes — the new order is picked up by the autosave and by
+        // project / file saves with no format change.
+        function moveItem(item, delta) {
+          var idx = mediaItems.indexOf(item);
+          var target = idx + delta;
+          if (idx < 0 || target < 0 || target >= mediaItems.length) return;
+          mediaItems.splice(idx, 1);
+          mediaItems.splice(target, 0, item);
+          renderMediaList();
+          layoutPins();
+          scheduleAutosave();
+          setStatus("「" + item.name + "」を表示順 " + (target + 1) + " 番目に移動しました（全 " + mediaItems.length + " 層・数字が大きいほど手前）。", false);
+          var chip = mediaListEl.children[target];
+          if (chip) { try { chip.scrollIntoView({ inline: "nearest", block: "nearest" }); } catch (e) {} }
+        }
         function removeItem(item) {
           var idx = mediaItems.indexOf(item);
           if (idx < 0) return;
@@ -1099,7 +1157,7 @@
           mediaItems.push(item);
           renderMediaList();
           setActiveItem(item);
-          hint.textContent = "マスク（黒い多角形）を追加しました。頂点をドラッグして、光を当てたくない部分を覆ってください。重ね順はリスト順で、マスクより下の素材が隠れます";
+          hint.textContent = "マスク（黒い多角形）を追加しました。頂点をドラッグして、光を当てたくない部分を覆ってください。重ね順はリスト順（右ほど手前）で、素材リストの ‹ › ボタンで表示順を変えられます";
           setStatus("マスク「" + item.name + "」を追加しました。頂点で形を合わせてください。", false);
           scheduleAutosave();
           return item;
