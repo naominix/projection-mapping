@@ -23,7 +23,7 @@
         --ink-dim: #6d675c;
         --accent: #e07b1f;
         --accent-ink: #ffffff;
-        --stage: #0a0a0c;
+        --stage: #000000;
         --pin: #f59e0b;
         --btn-bg: #ffffff;
         --btn-border: #cfccc2;
@@ -309,6 +309,19 @@
         flex: none;
         display: block;
       }
+      .media-thumb-mask {
+        background: #000;
+        border: 1px solid rgba(255,255,255,.65);
+        position: relative;
+      }
+      .media-thumb-mask::after {
+        content: "MASK";
+        position: absolute; inset: 0;
+        display: grid; place-items: center;
+        color: #fff; font-family: "IBM Plex Mono", monospace; font-size: 9px; letter-spacing: .08em;
+      }
+      #pinLayer { position: absolute; inset: 0; pointer-events: none; z-index: 5; }
+      #pinLayer .pin { pointer-events: auto; }
       .media-thumb-demo {
         background:
           linear-gradient(to right, #d9481f 0 50%, #1f9d63 50% 100%) top / 100% 50% no-repeat,
@@ -617,6 +630,11 @@
         .toolbar.top { flex-wrap: nowrap; }
         #hideUiBtn { font-size: 0; gap: 0; padding: 8px 10px; }
         #hideUiBtn svg { width: 20px; height: 20px; }
+        /* Icon-only secondary buttons on phones, so the top row
+           (add / demo / mask / hide-UI) fits one line at 390px and
+           the hide-UI button is never pushed off screen. */
+        #demoBtn, #maskBtn { font-size: 0; gap: 0; padding: 8px 10px; }
+        #demoBtn svg, #maskBtn svg { width: 20px; height: 20px; }
         #projectStrip { flex-wrap: nowrap; gap: 8px; padding: 6px 10px; }
         #projectName { flex: 1 1 auto; }
         #projectStrip .btn { flex: none; }
@@ -636,6 +654,10 @@
       <button class="btn" id="demoBtn" type="button">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/></svg>
         デモパターン
+      </button>
+      <button class="btn" id="maskBtn" type="button">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 3l18 18" /><rect x="3" y="3" width="18" height="18" fill="black" fill-opacity="0.85" stroke="none"/></svg>
+        マスクを追加
       </button>
       <span class="media-name" id="mediaName">デモパターン（内蔵）</span>
       <span class="spacer"></span>
@@ -681,11 +703,8 @@
     <main id="stageWrap">
       <canvas id="gl"></canvas>
       <svg id="outline" aria-hidden="true"><g id="outlineOthers"></g><polygon id="outlinePoly" points="" /></svg>
-      <button class="pin" type="button" data-i="0" aria-label="左上のピン"><span class="pin-tag">左上</span></button>
-      <button class="pin" type="button" data-i="1" aria-label="右上のピン"><span class="pin-tag">右上</span></button>
-      <button class="pin" type="button" data-i="2" aria-label="右下のピン"><span class="pin-tag">右下</span></button>
-      <button class="pin" type="button" data-i="3" aria-label="左下のピン"><span class="pin-tag">左下</span></button>
-      <div id="stageHint">素材リストで選んだ素材の四隅ピンをドラッグして、投影したい形の角に合わせてください（表示中の素材は同時に映ります）。「UIを隠す」で画面いっぱいに広げられます</div>
+      <div id="pinLayer" aria-label="多角形の頂点ピン"></div>
+      <div id="stageHint">選んだ素材の頂点ピンをドラッグして多角形の形に合わせてください。「頂点を追加／削除」で角の数を変えられます。多角形の外側は黒（光なし）になります。「UIを隠す」で画面いっぱいに広げられます</div>
       <div id="glError">このブラウザでは WebGL が使えないため、映像を表示できません。</div>
       <div id="exitChip" role="status">ダブルタップで編集画面に戻ります</div>
     </main>
@@ -701,6 +720,14 @@
         <input type="range" id="brightRange" min="20" max="200" value="100" />
         <output id="brightOut" for="brightRange">100%</output>
       </div>
+      <button class="btn" id="addVertBtn" type="button">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+        頂点を追加
+      </button>
+      <button class="btn" id="delVertBtn" type="button">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><line x1="5" y1="12" x2="19" y2="12"/></svg>
+        頂点を削除
+      </button>
       <button class="btn" id="resetBtn" type="button">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 12a9 9 0 1 0 3-6.7L3 8"/><path d="M3 3v5h5"/></svg>
         ピンをリセット
@@ -724,7 +751,7 @@
           <input type="text" id="projNameInput" placeholder="プロジェクト名" maxlength="60" autocomplete="off" />
           <button class="btn primary" id="sheetSaveBtn" type="button">保存する</button>
         </div>
-        <p class="sheet-note">素材の実データ・四隅の位置・表示 ON/OFF・重ね順・明るさをまとめて、この端末のブラウザ（Chrome）の中に保存します。大きな動画は保存容量を多く使います。作業中の状態は自動でも保存され、開き直すと復元されます。</p>
+        <p class="sheet-note">素材の実データ・多角形の頂点位置・表示 ON/OFF・重ね順・明るさをまとめて（マスクも含みます）、この端末のブラウザ（Chrome）の中に保存します。大きな動画は保存容量を多く使います。作業中の状態は自動でも保存され、開き直すと復元されます。</p>
         <h3 class="sheet-sub">ファイルへの保存・読み込み</h3>
         <p class="sheet-note" style="margin-top:0">プロジェクトを1つのファイル（.pmproj.json）に書き出せます。素材の実データも含まれるため、動画があるとファイルは大きくなります。書き出したファイルは別の端末・ブラウザでも読み込めます（例：AndroidのChromeで作って、iPadのSafariで開く）。読み込むと、今の作業内容はそのファイルの内容に置き換わります。</p>
         <div class="sheet-file-row">
@@ -755,7 +782,8 @@
         var canvas = document.getElementById("gl");
         var outlinePoly = document.getElementById("outlinePoly");
         var outlineOthers = document.getElementById("outlineOthers");
-        var pinEls = Array.prototype.slice.call(document.querySelectorAll(".pin"));
+        var pinLayer = document.getElementById("pinLayer");
+        var pinEls = [];
         var mediaName = document.getElementById("mediaName");
         var hint = document.getElementById("stageHint");
 
@@ -775,24 +803,51 @@
           { x: 0.94, y: 0.72 },
           { x: 0.06, y: 0.70 }
         ];
-        // Every material owns its own four corners, so several materials
-        // can be on stage at once, each warped onto a different face of
-        // the target. New materials start slightly inset from the base
-        // quad so their corners do not sit exactly on top of an existing
-        // material's corners.
+        // UV per default corner (v=1 is the top of the image with FLIP_Y).
+        var DEFAULT_UVS = [
+          { u: 0, v: 1 }, { u: 1, v: 1 }, { u: 1, v: 0 }, { u: 0, v: 0 }
+        ];
+        var MAX_VERTS = 16;
+        // Every material owns its own polygon (verts: [{x,y,u,v}, ...]).
+        // x/y are screen fractions; u/v are the texture coordinates that
+        // stay attached to that vertex when it moves, so adding a vertex
+        // on an edge (its u/v is the edge midpoint) lets the edge bend
+        // and the image follows. Rendering triangulates the polygon
+        // (ear clipping) — only the polygon interior is drawn, and the
+        // area outside stays pure black (= no light from a projector),
+        // in the editor as well as in projection mode.
         function makeDefaultPins(n) {
           var off = (n % 4) * 0.055;
-          return [
-            { x: DEFAULT_PINS[0].x + off, y: DEFAULT_PINS[0].y + off * 0.5 },
-            { x: DEFAULT_PINS[1].x - off, y: DEFAULT_PINS[1].y + off * 0.5 },
-            { x: DEFAULT_PINS[2].x - off, y: DEFAULT_PINS[2].y - off * 0.5 },
-            { x: DEFAULT_PINS[3].x + off, y: DEFAULT_PINS[3].y - off * 0.5 }
-          ];
+          return DEFAULT_PINS.map(function (p, i) {
+            return {
+              x: p.x + (i === 0 || i === 3 ? off : -off),
+              y: p.y + (i === 0 || i === 1 ? off * 0.5 : -off * 0.5),
+              u: DEFAULT_UVS[i].u, v: DEFAULT_UVS[i].v
+            };
+          });
         }
-        // `pins` always points at the SELECTED material's corner array,
-        // so the drag / keyboard / reset code below edits whichever
+        // Convert a saved item (new `verts`, or legacy 4-point `pins`)
+        // into a full verts array.
+        function toVerts(data, fallbackIdx) {
+          var src = null;
+          if (data) {
+            if (Array.isArray(data.verts) && data.verts.length >= 3) src = data.verts;
+            else if (Array.isArray(data.pins) && data.pins.length >= 3) src = data.pins;
+          }
+          if (!src) return makeDefaultPins(fallbackIdx || 0);
+          return src.map(function (p, i) {
+            var u = (typeof p.u === "number") ? p.u : (src.length === 4 && DEFAULT_UVS[i] ? DEFAULT_UVS[i].u : 0.5);
+            var v = (typeof p.v === "number") ? p.v : (src.length === 4 && DEFAULT_UVS[i] ? DEFAULT_UVS[i].v : 0.5);
+            return { x: p.x, y: p.y, u: u, v: v };
+          });
+        }
+        function cloneVerts(src) {
+          return (src || []).map(function (p) { return { x: p.x, y: p.y, u: (typeof p.u === "number" ? p.u : 0), v: (typeof p.v === "number" ? p.v : 0) }; });
+        }
+        // `verts` always points at the SELECTED material's polygon, so
+        // the drag / keyboard / reset code below edits whichever
         // material is selected in the list.
-        var pins = null;
+        var verts = null;
         var brightness = 1.0;
         var gridOn = true;
         var projecting = false;
@@ -802,8 +857,12 @@
         var screenW = 1, screenH = 1;
 
         /* ---------- media library (multiple items, layered) ---------- */
-        // Each item: { id, kind:'demo'|'video'|'image', name, el, url,
-        //              pins:[{x,y}×4], visible:bool }
+        // Each item: { id, kind:'demo'|'video'|'image'|'mask', name, el, url,
+        //              verts:[{x,y,u,v}, ...] (3..16), visible:bool }
+        // A 'mask' item has NO media (el/url/blob are null): it is a pure
+        // black polygon layer. Drawn in list order like any other item,
+        // it covers whatever is below it with black (= no light), which
+        // is how you blank out part of another material's picture.
         // Items stay alive for the whole session so toggling never loses
         // a previously added file. Every VISIBLE item is drawn at once,
         // in list order (later items on top), each warped by its own
@@ -820,13 +879,13 @@
         var activeItem = null;
         var nextMediaId = 1;
 
-        var demoItem = { id: 0, kind: "demo", name: "デモパターン（内蔵）", el: demoCanvas, url: null, blob: null, bytes: 0, pins: makeDefaultPins(0), visible: true, _tex: null, _texDirty: true };
+        var demoItem = { id: 0, kind: "demo", name: "デモパターン（内蔵）", el: demoCanvas, url: null, blob: null, bytes: 0, verts: makeDefaultPins(0), visible: true, _tex: null, _texDirty: true };
         mediaItems.push(demoItem);
         activeItem = demoItem;
-        pins = demoItem.pins;
+        verts = demoItem.verts;
 
         function kindLabel(kind) {
-          return kind === "video" ? "動画" : kind === "image" ? "画像" : "内蔵";
+          return kind === "video" ? "動画" : kind === "image" ? "画像" : kind === "mask" ? "マスク（黒）" : "内蔵";
         }
         // HTMLMediaElement.play() returns a Promise in modern browsers
         // but undefined in older Android WebViews. Calling .catch() on
@@ -853,13 +912,18 @@
             var main = document.createElement("button");
             main.type = "button";
             main.className = "media-main";
-            main.setAttribute("aria-label", item.name + " を選択して四隅を編集");
+            main.setAttribute("aria-label", item.name + " を選択して多角形を編集");
 
             if (item.kind === "demo") {
               var th = document.createElement("span");
               th.className = "media-thumb media-thumb-demo";
               th.setAttribute("aria-hidden", "true");
               main.appendChild(th);
+            } else if (item.kind === "mask") {
+              var mk = document.createElement("span");
+              mk.className = "media-thumb media-thumb-mask";
+              mk.setAttribute("aria-hidden", "true");
+              main.appendChild(mk);
             } else if (item.kind === "image") {
               var im = document.createElement("img");
               im.className = "media-thumb"; im.src = item.url; im.alt = "";
@@ -906,10 +970,11 @@
         // materials keep showing (and their videos keep playing).
         function setActiveItem(item) {
           activeItem = item;
-          pins = item.pins;
+          verts = item.verts;
+          selectedPin = 0;
           if (!item.visible) item.visible = true;
           if (item.kind === "video") safePlay(item.el);
-          item._texDirty = true;
+          if (item.kind !== "mask") item._texDirty = true;
           mediaName.textContent = item.name;
           layoutPins();
           renderMediaList();
@@ -943,6 +1008,22 @@
           }
           scheduleAutosave();
         }
+        // Mask-only part: a black polygon layer with no media at all.
+        // It is a first-class list item — same polygon editing, same
+        // visibility toggle, same stacking order (list order), and it
+        // is included in project / file saves like any other item.
+        var maskSeq = 0;
+        function addMaskItem() {
+          maskSeq++;
+          var item = { id: nextMediaId++, kind: "mask", name: "マスク " + maskSeq, el: null, url: null, blob: null, failed: false, bytes: 0, sizeLabel: "", verts: makeDefaultPins(mediaItems.length), visible: true, _tex: null, _texDirty: false };
+          mediaItems.push(item);
+          renderMediaList();
+          setActiveItem(item);
+          hint.textContent = "マスク（黒い多角形）を追加しました。頂点をドラッグして、光を当てたくない部分を覆ってください。重ね順はリスト順で、マスクより下の素材が隠れます";
+          setStatus("マスク「" + item.name + "」を追加しました。頂点で形を合わせてください。", false);
+          scheduleAutosave();
+          return item;
+        }
 
         /* ---------- WebGL setup ---------- */
         var gl = canvas.getContext("webgl", { alpha: false, antialias: true }) ||
@@ -959,13 +1040,20 @@
           gl.compileShader(sh);
           return sh;
         }
+        // Polygon mesh rendering: each vertex carries its own texture
+        // coordinate (u/v) and the polygon is triangulated on the CPU
+        // (ear clipping, see triangulate()). The GPU only draws the
+        // polygon interior, so everything outside a material's polygon
+        // is never lit — the cleared background is pure black, which a
+        // projector shows as "no light". Mask items use uSolid=1 and
+        // draw the same mesh in pure black on top of lower layers.
         var vsSrc = [
           "attribute vec2 aPos;",
+          "attribute vec2 aUv;",
           "uniform vec2 uRes;",
-          "uniform mat3 uM;",
-          "varying vec3 vT;",
+          "varying vec2 vUv;",
           "void main() {",
-          "  vT = uM * vec3(aPos, 1.0);",
+          "  vUv = aUv;",
           "  vec2 ndc = vec2(aPos.x / uRes.x * 2.0 - 1.0, 1.0 - aPos.y / uRes.y * 2.0);",
           "  gl_Position = vec4(ndc, 0.0, 1.0);",
           "}"
@@ -973,16 +1061,14 @@
         var fsSrc = [
           derivExt ? "#extension GL_OES_standard_derivatives : enable" : "",
           "precision mediump float;",
-          "varying vec3 vT;",
+          "varying vec2 vUv;",
           "uniform sampler2D uTex;",
           "uniform float uBrightness;",
           "uniform float uGrid;",
+          "uniform float uSolid;",
           "void main() {",
-          "  vec2 uv = vT.xy / vT.z;",
-          "  if (uv.x < 0.0 || uv.x > 1.0 || uv.y < 0.0 || uv.y > 1.0) {",
-          "    gl_FragColor = vec4(0.0, 0.0, 0.0, 1.0);",
-          "    return;",
-          "  }",
+          "  if (uSolid > 0.5) { gl_FragColor = vec4(0.0, 0.0, 0.0, 1.0); return; }",
+          "  vec2 uv = clamp(vUv, 0.0, 1.0);",
           "  vec4 c = texture2D(uTex, uv);",
           "  c.rgb *= uBrightness;",
           derivExt ?
@@ -1002,7 +1088,7 @@
         // canvas stays black forever and projection looks "frozen".
         // Each material gets its own texture (item._tex), created lazily
         // by getTex() and dropped here on context restore.
-        var prog, aPos, uRes, uM, uTex, uBrightness, uGrid, posBuf, idxBuf;
+        var prog, aPos, aUv, uRes, uTex, uBrightness, uGrid, uSolid, posBuf, uvBuf, idxBuf;
         function getTex(item) {
           if (!item._tex) {
             var t = gl.createTexture();
@@ -1024,19 +1110,18 @@
           gl.useProgram(prog);
 
           aPos = gl.getAttribLocation(prog, "aPos");
+          aUv = gl.getAttribLocation(prog, "aUv");
           uRes = gl.getUniformLocation(prog, "uRes");
-          uM = gl.getUniformLocation(prog, "uM");
           uTex = gl.getUniformLocation(prog, "uTex");
           uBrightness = gl.getUniformLocation(prog, "uBrightness");
           uGrid = gl.getUniformLocation(prog, "uGrid");
+          uSolid = gl.getUniformLocation(prog, "uSolid");
 
           posBuf = gl.createBuffer();
-          gl.bindBuffer(gl.ARRAY_BUFFER, posBuf);
+          uvBuf = gl.createBuffer();
           gl.enableVertexAttribArray(aPos);
-          gl.vertexAttribPointer(aPos, 2, gl.FLOAT, false, 0, 0);
+          gl.enableVertexAttribArray(aUv);
           idxBuf = gl.createBuffer();
-          gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, idxBuf);
-          gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, new Uint16Array([0, 1, 2, 0, 2, 3]), gl.STATIC_DRAW);
 
           gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, true);
           gl.uniform1i(uTex, 0);
@@ -1053,43 +1138,64 @@
           resize();
         });
 
-        /* ---------- homography (dest pixels -> source uv) ---------- */
-        function solveLinear(A, b) {
-          var n = b.length;
-          for (var col = 0, row = 0; col < n && row < n; col++, row++) {
-            var piv = row;
-            for (var i = row + 1; i < n; i++) if (Math.abs(A[i][col]) > Math.abs(A[piv][col])) piv = i;
-            var tmpA = A[row]; A[row] = A[piv]; A[piv] = tmpA;
-            var tmpB = b[row]; b[row] = b[piv]; b[piv] = tmpB;
-            for (var j = row + 1; j < n; j++) {
-              var f = A[j][col] / A[row][col];
-              for (var k = col; k < n; k++) A[j][k] -= f * A[row][k];
-              b[j] -= f * b[row];
+        /* ---------- polygon triangulation (ear clipping) ---------- */
+        // Works for any simple polygon (convex or concave), which is
+        // what the pin editor produces. Returns triangle indices into
+        // the vertex array. Falls back to a fan if no ear is found
+        // (degenerate / self-intersecting input) so rendering never
+        // breaks, it just looks approximate until the shape is fixed.
+        function cross2(ax, ay, bx, by) { return ax * by - ay * bx; }
+        function pointInTri(px, py, a, b, c) {
+          var d1 = cross2(b.x - a.x, b.y - a.y, px - a.x, py - a.y);
+          var d2 = cross2(c.x - b.x, c.y - b.y, px - b.x, py - b.y);
+          var d3 = cross2(a.x - c.x, a.y - c.y, px - c.x, py - c.y);
+          var neg = (d1 < -1e-9) || (d2 < -1e-9) || (d3 < -1e-9);
+          var pos = (d1 > 1e-9) || (d2 > 1e-9) || (d3 > 1e-9);
+          return !(neg && pos);
+        }
+        function triangulate(pts) {
+          var n = pts.length;
+          if (n < 3) return [];
+          if (n === 3) return [0, 1, 2];
+          var idx = [];
+          for (var i = 0; i < n; i++) idx.push(i);
+          // Signed area: normalise winding so "convex" tests are stable.
+          var area = 0;
+          for (var j = 0; j < n; j++) {
+            var p = pts[j], q = pts[(j + 1) % n];
+            area += p.x * q.y - q.x * p.y;
+          }
+          if (area < 0) idx.reverse();
+          var tris = [];
+          var guard = 0;
+          while (idx.length > 3 && guard++ < 500) {
+            var earFound = false;
+            for (var k = 0; k < idx.length; k++) {
+              var i0 = idx[(k + idx.length - 1) % idx.length];
+              var i1 = idx[k];
+              var i2 = idx[(k + 1) % idx.length];
+              var a = pts[i0], b = pts[i1], c = pts[i2];
+              if (cross2(b.x - a.x, b.y - a.y, c.x - b.x, c.y - b.y) <= 1e-12) continue; // reflex or collinear
+              var blocked = false;
+              for (var m = 0; m < idx.length; m++) {
+                var im = idx[m];
+                if (im === i0 || im === i1 || im === i2) continue;
+                if (pointInTri(pts[im].x, pts[im].y, a, b, c)) { blocked = true; break; }
+              }
+              if (blocked) continue;
+              tris.push(i0, i1, i2);
+              idx.splice(k, 1);
+              earFound = true;
+              break;
             }
+            if (!earFound) break;
           }
-          var x = new Array(n).fill(0);
-          for (var i = n - 1; i >= 0; i--) {
-            var s = b[i];
-            for (var j = i + 1; j < n; j++) s -= A[i][j] * x[j];
-            x[i] = s / A[i][i];
+          if (idx.length === 3) tris.push(idx[0], idx[1], idx[2]);
+          else if (tris.length === 0) {
+            for (var f = 1; f < n - 1; f++) tris.push(0, f, f + 1);
           }
-          return x;
+          return tris;
         }
-        // Maps src quad -> dst quad. Returns column-major Float32Array(9) for GLSL mat3.
-        function homography(src, dst) {
-          var A = [], b = [];
-          for (var i = 0; i < 4; i++) {
-            var x = src[i].x, y = src[i].y, u = dst[i].x, v = dst[i].y;
-            A.push([x, y, 1, 0, 0, 0, -u * x, -u * y]); b.push(u);
-            A.push([0, 0, 0, x, y, 1, -v * x, -v * y]); b.push(v);
-          }
-          var h = solveLinear(A, b);
-          return new Float32Array([h[0], h[3], h[6], h[1], h[4], h[7], h[2], h[5], 1]);
-        }
-        // uv corners for TL, TR, BR, BL (v = 1 is the top of the image with FLIP_Y)
-        var UV_CORNERS = [
-          { x: 0, y: 1 }, { x: 1, y: 1 }, { x: 1, y: 0 }, { x: 0, y: 0 }
-        ];
 
         /* ---------- demo pattern ---------- */
         function drawDemo(t) {
@@ -1142,31 +1248,59 @@
         function pinStagePx(p) {
           return { x: p.x * screenW - stageLeft, y: p.y * screenH - stageTop };
         }
-        function quadPoints(itemPins) {
-          return itemPins.map(function (p) {
+        function quadPoints(itemVerts) {
+          return itemVerts.map(function (p) {
             var q = pinStagePx(p);
             return q.x.toFixed(1) + "," + q.y.toFixed(1);
           }).join(" ");
         }
+        // Pin handles are generated to match the active polygon's
+        // vertex count (3..16), so adding / removing a vertex rebuilds
+        // the handle set. Rebuild only when the count or the active
+        // item changes — never during a drag.
+        var pinOwner = null;
+        function rebuildPinEls() {
+          pinLayer.innerHTML = "";
+          pinEls = [];
+          if (!verts) { pinOwner = null; return; }
+          pinOwner = activeItem;
+          verts.forEach(function (v, i) {
+            var el = document.createElement("button");
+            el.type = "button";
+            el.className = "pin";
+            el.setAttribute("data-i", String(i));
+            el.setAttribute("aria-label", "頂点 " + (i + 1) + " のピン");
+            var tag = document.createElement("span");
+            tag.className = "pin-tag";
+            tag.textContent = String(i + 1);
+            el.appendChild(tag);
+            attachPinHandlers(el, i);
+            pinLayer.appendChild(el);
+            pinEls.push(el);
+          });
+          markSelected();
+        }
         function layoutPins() {
-          if (!pins) return;
-          // The corner pins belong to the selected material, and only
+          if (!verts) return;
+          if (pinOwner !== activeItem || pinEls.length !== verts.length) rebuildPinEls();
+          // The vertex pins belong to the selected material, and only
           // while it is on stage. Other visible materials get a faint
           // outline so their placement stays readable without a second
           // set of draggable handles crowding the stage.
           var showPins = !!(activeItem && activeItem.visible && !activeItem.failed);
-          for (var i = 0; i < 4; i++) {
-            var px = pinStagePx(pins[i]);
+          for (var i = 0; i < verts.length; i++) {
+            if (!pinEls[i]) break;
+            var px = pinStagePx(verts[i]);
             pinEls[i].style.left = px.x + "px";
             pinEls[i].style.top = px.y + "px";
             pinEls[i].style.display = showPins ? "" : "none";
           }
-          outlinePoly.setAttribute("points", showPins ? quadPoints(pins) : "");
+          outlinePoly.setAttribute("points", showPins ? quadPoints(verts) : "");
           outlineOthers.innerHTML = "";
           mediaItems.forEach(function (item) {
             if (item === activeItem || !item.visible || item.failed) return;
             var poly = document.createElementNS("http://www.w3.org/2000/svg", "polygon");
-            poly.setAttribute("points", quadPoints(item.pins));
+            poly.setAttribute("points", quadPoints(item.verts));
             poly.setAttribute("class", "other");
             outlineOthers.appendChild(poly);
           });
@@ -1216,16 +1350,15 @@
 
         /* ---------- pin dragging ---------- */
         var dragging = -1;
-        pinEls.forEach(function (el) {
-          var i = parseInt(el.getAttribute("data-i"), 10);
+        function attachPinHandlers(el, i) {
           el.addEventListener("pointerdown", function (e) {
             dragging = i; selectedPin = i;
-            el.setPointerCapture(e.pointerId);
+            try { el.setPointerCapture(e.pointerId); } catch (err) {}
             markSelected();
             e.preventDefault();
           });
           el.addEventListener("pointermove", function (e) {
-            if (dragging !== i) return;
+            if (dragging !== i || !verts || !verts[i]) return;
             // Pointer client coords are screen coords: store the pin as a
             // fraction of the screen so it projects at this exact spot.
             // Clamp to the editable rect: the whole screen while the UI
@@ -1234,20 +1367,45 @@
             var r = editableRect();
             var cx = Math.min(r.right, Math.max(r.left, e.clientX));
             var cy = Math.min(r.bottom, Math.max(r.top, e.clientY));
-            pins[i].x = cx / screenW;
-            pins[i].y = cy / screenH;
+            verts[i].x = cx / screenW;
+            verts[i].y = cy / screenH;
             layoutPins();
           });
           el.addEventListener("pointerup", function () { dragging = -1; scheduleAutosave(); });
           el.addEventListener("pointercancel", function () { dragging = -1; scheduleAutosave(); });
           el.addEventListener("focus", function () { selectedPin = i; markSelected(); });
-        });
+        }
         function markSelected() {
           pinEls.forEach(function (el, j) {
             el.classList.toggle("selected", j === selectedPin);
           });
         }
-        markSelected();
+        // Add a vertex at the midpoint of the edge that starts at the
+        // selected vertex; its texture coordinate is the edge midpoint
+        // too, so the picture does not jump — the edge just gains a
+        // bend point. Delete removes the selected vertex (min 3).
+        function addVertex() {
+          if (!verts) return;
+          if (verts.length >= MAX_VERTS) { setStatus("頂点は最大 " + MAX_VERTS + " 個までです。", true); return; }
+          var i = Math.min(selectedPin, verts.length - 1);
+          var a = verts[i], b = verts[(i + 1) % verts.length];
+          verts.splice(i + 1, 0, { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2, u: (a.u + b.u) / 2, v: (a.v + b.v) / 2 });
+          selectedPin = i + 1;
+          pinOwner = null; // force handle rebuild
+          layoutPins();
+          markSelected();
+          scheduleAutosave();
+        }
+        function deleteVertex() {
+          if (!verts) return;
+          if (verts.length <= 3) { setStatus("多角形には頂点が最低3個必要です。", true); return; }
+          verts.splice(selectedPin, 1);
+          selectedPin = Math.min(selectedPin, verts.length - 1);
+          pinOwner = null;
+          layoutPins();
+          markSelected();
+          scheduleAutosave();
+        }
 
         document.addEventListener("keydown", function (e) {
           if (projecting) {
@@ -1258,9 +1416,10 @@
           // nudge pins with the arrow keys.
           if (e.target && (e.target.tagName === "INPUT" || e.target.tagName === "TEXTAREA")) return;
           if (e.key.indexOf("Arrow") === 0) {
+            if (!verts || !verts[selectedPin]) return;
             // Nudge in screen pixels, clamped to the stage like dragging.
             var stepPx = e.shiftKey ? 10 : 2;
-            var p = pins[selectedPin];
+            var p = verts[selectedPin];
             var cx = p.x * screenW, cy = p.y * screenH;
             if (e.key === "ArrowLeft") cx -= stepPx;
             if (e.key === "ArrowRight") cx += stepPx;
@@ -1285,36 +1444,59 @@
             gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, item.el);
           } catch (err) { /* source not ready yet */ }
         }
+        function drawItemMesh(item, destPx, solid) {
+          var tris = triangulate(destPx);
+          if (!tris.length) return;
+          var positions = new Float32Array(destPx.length * 2);
+          var uvs = new Float32Array(destPx.length * 2);
+          destPx.forEach(function (p, i) {
+            positions[i * 2] = p.x; positions[i * 2 + 1] = p.y;
+          });
+          item.verts.forEach(function (v, i) {
+            uvs[i * 2] = (typeof v.u === "number" ? v.u : 0);
+            uvs[i * 2 + 1] = (typeof v.v === "number" ? v.v : 0);
+          });
+          gl.bindBuffer(gl.ARRAY_BUFFER, posBuf);
+          gl.bufferData(gl.ARRAY_BUFFER, positions, gl.DYNAMIC_DRAW);
+          gl.vertexAttribPointer(aPos, 2, gl.FLOAT, false, 0, 0);
+          gl.bindBuffer(gl.ARRAY_BUFFER, uvBuf);
+          gl.bufferData(gl.ARRAY_BUFFER, uvs, gl.DYNAMIC_DRAW);
+          gl.vertexAttribPointer(aUv, 2, gl.FLOAT, false, 0, 0);
+          gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, idxBuf);
+          gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, new Uint16Array(tris), gl.DYNAMIC_DRAW);
+          gl.uniform1f(uSolid, solid ? 1 : 0);
+          gl.drawElements(gl.TRIANGLES, tris.length, gl.UNSIGNED_SHORT, 0);
+        }
         function frame(t) {
           if (gl.isContextLost()) { requestAnimationFrame(frame); return; }
-          if (projecting) gl.clearColor(0, 0, 0, 1);
-          else gl.clearColor(0.04, 0.04, 0.05, 1);
+          // Pure black in BOTH modes: black is "no light" for a
+          // projector, and the editor must show exactly what will be
+          // projected — everything outside every polygon stays black.
+          gl.clearColor(0, 0, 0, 1);
           gl.clear(gl.COLOR_BUFFER_BIT);
 
           gl.uniform2f(uRes, stageW, stageH);
           gl.uniform1f(uBrightness, brightness);
           gl.uniform1f(uGrid, (gridOn && !projecting) ? 1 : 0);
 
-          // Draw every visible material in list order, each with its
-          // own texture and its own four-corner warp.
+          // Draw every visible item in list order, each with its own
+          // polygon mesh. Mask items draw solid black over the layers
+          // below them; media items draw their texture inside their
+          // polygon only.
           mediaItems.forEach(function (item) {
-            if (!item.visible || item.failed || !item.el) return;
+            if (!item.visible || item.failed || !item.verts || item.verts.length < 3) return;
+            var destPx = item.verts.map(pinStagePx);
+            if (item.kind === "mask") {
+              drawItemMesh(item, destPx, true);
+              return;
+            }
+            if (!item.el) return;
             if (item.kind === "demo") { drawDemo(t); item._texDirty = true; }
             else if (item.kind === "video" && item.el.readyState >= 2) item._texDirty = true;
             else if (item.kind === "image" && /\.gif$/i.test(item.name)) item._texDirty = true;
             if (item._texDirty) { uploadTexture(item); item._texDirty = false; }
             else gl.bindTexture(gl.TEXTURE_2D, getTex(item));
-
-            var destPx = item.pins.map(pinStagePx);
-            var m = homography(destPx, UV_CORNERS);
-            var positions = new Float32Array([
-              destPx[0].x, destPx[0].y, destPx[1].x, destPx[1].y,
-              destPx[2].x, destPx[2].y, destPx[3].x, destPx[3].y
-            ]);
-            gl.bindBuffer(gl.ARRAY_BUFFER, posBuf);
-            gl.bufferData(gl.ARRAY_BUFFER, positions, gl.DYNAMIC_DRAW);
-            gl.uniformMatrix3fv(uM, false, m);
-            gl.drawElements(gl.TRIANGLES, 6, gl.UNSIGNED_SHORT, 0);
+            drawItemMesh(item, destPx, false);
           });
           requestAnimationFrame(frame);
         }
@@ -1410,14 +1592,14 @@
           if (detectKind(file) === "video") {
             var v = document.createElement("video");
             v.loop = true; v.muted = true; v.setAttribute("playsinline", "");
-            item = { id: nextMediaId++, kind: "video", name: file.name, el: v, url: url, blob: file, failed: false, bytes: file.size, sizeLabel: formatBytes(file.size), pins: makeDefaultPins(mediaItems.length), visible: true, _tex: null, _texDirty: true };
+            item = { id: nextMediaId++, kind: "video", name: file.name, el: v, url: url, blob: file, failed: false, bytes: file.size, sizeLabel: formatBytes(file.size), verts: makeDefaultPins(mediaItems.length), visible: true, _tex: null, _texDirty: true };
             (function (it) {
               v.addEventListener("error", function () { markFailed(it); });
             })(item);
             v.src = url;
           } else {
             var im = new Image();
-            item = { id: nextMediaId++, kind: "image", name: file.name, el: im, url: url, blob: file, failed: false, bytes: file.size, sizeLabel: formatBytes(file.size), pins: makeDefaultPins(mediaItems.length), visible: true, _tex: null, _texDirty: true };
+            item = { id: nextMediaId++, kind: "image", name: file.name, el: im, url: url, blob: file, failed: false, bytes: file.size, sizeLabel: formatBytes(file.size), verts: makeDefaultPins(mediaItems.length), visible: true, _tex: null, _texDirty: true };
             (function (it) {
               im.onload = function () { it._texDirty = true; };
               im.addEventListener("error", function () { markFailed(it); });
@@ -1446,7 +1628,7 @@
           renderMediaList();
           if (added.length) {
             try { setActiveItem(added[added.length - 1]); } catch (e) { renderMediaList(); }
-            hint.textContent = added.length + "点の素材を追加しました。追加した素材は同時に表示されます。素材リストで選んだ素材の四隅をドラッグしてください";
+            hint.textContent = added.length + "点の素材を追加しました。追加した素材は同時に表示されます。素材リストで選んだ素材の頂点をドラッグしてください";
             // Name every added file with its size, so the result of the
             // pick is verifiable on screen. There is no size limit in
             // this app; only a very large video can run into the
@@ -1472,6 +1654,11 @@
         document.getElementById("demoBtn").addEventListener("click", function () {
           setActiveItem(demoItem);
         });
+        document.getElementById("maskBtn").addEventListener("click", function () {
+          addMaskItem();
+        });
+        document.getElementById("addVertBtn").addEventListener("click", addVertex);
+        document.getElementById("delVertBtn").addEventListener("click", deleteVertex);
         renderMediaList();
 
         /* ---------- project persistence (IndexedDB) ---------- */
@@ -1555,9 +1742,6 @@
           });
         }
 
-        function clonePins(src) {
-          return (src || []).map(function (p) { return { x: p.x, y: p.y }; });
-        }
         function collectProjectData(id, name) {
           return {
             id: id,
@@ -1572,9 +1756,10 @@
               return {
                 kind: it.kind,
                 name: it.name,
-                blob: it.kind === "demo" ? null : (it.blob || null),
+                blob: (it.kind === "demo" || it.kind === "mask") ? null : (it.blob || null),
                 bytes: it.bytes || (it.blob ? it.blob.size : 0),
-                pins: clonePins(it.pins),
+                verts: cloneVerts(it.verts),
+                pins: cloneVerts(it.verts),
                 visible: !!it.visible
               };
             })
@@ -1582,19 +1767,22 @@
         }
         // Rebuild a media item from a stored Blob, mirroring addFile()
         // but with the saved pins / visibility instead of defaults.
-        function buildStoredItem(data) {
+        function buildStoredItem(data, idx) {
+          if (data.kind === "mask") {
+            return { id: nextMediaId++, kind: "mask", name: data.name || "マスク", el: null, url: null, blob: null, failed: false, bytes: 0, sizeLabel: "", verts: toVerts(data, idx || 0), visible: !!data.visible, _tex: null, _texDirty: false };
+          }
           if (!data.blob) return null;
           var url = URL.createObjectURL(data.blob);
           var item;
           if (data.kind === "video") {
             var v = document.createElement("video");
             v.loop = true; v.muted = true; v.setAttribute("playsinline", "");
-            item = { id: nextMediaId++, kind: "video", name: data.name, el: v, url: url, blob: data.blob, failed: false, bytes: data.bytes || data.blob.size, sizeLabel: formatBytes(data.bytes || data.blob.size), pins: clonePins(data.pins), visible: !!data.visible, _tex: null, _texDirty: true };
+            item = { id: nextMediaId++, kind: "video", name: data.name, el: v, url: url, blob: data.blob, failed: false, bytes: data.bytes || data.blob.size, sizeLabel: formatBytes(data.bytes || data.blob.size), verts: toVerts(data, idx || 0), visible: !!data.visible, _tex: null, _texDirty: true };
             (function (it) { v.addEventListener("error", function () { markFailed(it); }); })(item);
             v.src = url;
           } else {
             var im = new Image();
-            item = { id: nextMediaId++, kind: "image", name: data.name, el: im, url: url, blob: data.blob, failed: false, bytes: data.bytes || data.blob.size, sizeLabel: formatBytes(data.bytes || data.blob.size), pins: clonePins(data.pins), visible: !!data.visible, _tex: null, _texDirty: true };
+            item = { id: nextMediaId++, kind: "image", name: data.name, el: im, url: url, blob: data.blob, failed: false, bytes: data.bytes || data.blob.size, sizeLabel: formatBytes(data.bytes || data.blob.size), verts: toVerts(data, idx || 0), visible: !!data.visible, _tex: null, _texDirty: true };
             (function (it) {
               im.onload = function () { it._texDirty = true; };
               im.addEventListener("error", function () { markFailed(it); });
@@ -1618,13 +1806,13 @@
           if (!rec || !rec.items) return;
           restoring = true;
           clearNonDemoItems();
-          rec.items.forEach(function (data) {
+          rec.items.forEach(function (data, idx) {
             if (data.kind === "demo") {
-              if (data.pins && data.pins.length === 4) demoItem.pins = clonePins(data.pins);
+              demoItem.verts = toVerts(data, 0);
               demoItem.visible = data.visible !== false;
               demoItem._texDirty = true;
             } else {
-              var item = buildStoredItem(data);
+              var item = buildStoredItem(data, idx);
               if (item) mediaItems.push(item);
             }
           });
@@ -1639,7 +1827,9 @@
           }
           var idx = Math.min(Math.max(0, rec.activeIndex || 0), mediaItems.length - 1);
           activeItem = mediaItems[idx] || demoItem;
-          pins = activeItem.pins;
+          verts = activeItem.verts;
+          selectedPin = 0;
+          pinOwner = null;
           mediaItems.forEach(function (it) {
             if (it.visible && it.kind === "video") safePlay(it.el);
           });
@@ -1666,8 +1856,9 @@
             if (!rec || !rec.items || !rec.items.length) return;
             var hasUserMedia = rec.items.some(function (d) { return d.kind !== "demo"; });
             var demoMoved = rec.items.some(function (d) {
-              return d.kind === "demo" && d.pins && d.pins.some(function (p, i) {
-                return Math.abs(p.x - DEFAULT_PINS[i].x) > 0.001 || Math.abs(p.y - DEFAULT_PINS[i].y) > 0.001;
+              var src = d.verts || d.pins;
+              return d.kind === "demo" && src && src.some(function (p, i) {
+                return !DEFAULT_PINS[i] || Math.abs(p.x - DEFAULT_PINS[i].x) > 0.001 || Math.abs(p.y - DEFAULT_PINS[i].y) > 0.001;
               });
             });
             if (!hasUserMedia && !demoMoved && rec.brightness === 1 && rec.gridOn !== false) return;
@@ -1786,7 +1977,7 @@
         function newProject() {
           restoring = true;
           clearNonDemoItems();
-          demoItem.pins = makeDefaultPins(0);
+          demoItem.verts = makeDefaultPins(0);
           demoItem.visible = true;
           demoItem._texDirty = true;
           brightness = 1.0;
@@ -1795,7 +1986,9 @@
           gridOn = true;
           gridBtn.setAttribute("aria-pressed", "true");
           activeItem = demoItem;
-          pins = demoItem.pins;
+          verts = demoItem.verts;
+          selectedPin = 0;
+          pinOwner = null;
           mediaName.textContent = demoItem.name;
           currentProjectId = null;
           currentProjectName = null;
@@ -1882,7 +2075,8 @@
                   name: d.name,
                   mime: d.blob ? (d.blob.type || "") : "",
                   bytes: d.bytes || (d.blob ? d.blob.size : 0),
-                  pins: clonePins(d.pins),
+                  verts: cloneVerts(d.verts),
+                  pins: cloneVerts(d.verts),
                   visible: !!d.visible,
                   data: b64
                 });
@@ -1892,7 +2086,7 @@
           chain.then(function () {
             var payload = {
               format: FILE_FORMAT,
-              version: 1,
+              version: 2,
               app: "スマホプロジェクションマッピング",
               name: exportName,
               exportedAt: new Date().toISOString(),
@@ -1939,15 +2133,19 @@
             // Validate and decode everything BEFORE touching the stage,
             // so a bad file leaves the current work untouched.
             var converted = parsed.items.map(function (d, idx) {
-              if (!d || (d.kind !== "demo" && d.kind !== "video" && d.kind !== "image")) throw new Error("bad-format");
-              var itemPins = (Array.isArray(d.pins) && d.pins.length === 4 && d.pins.every(function (p) { return p && typeof p.x === "number" && typeof p.y === "number"; }))
-                ? clonePins(d.pins) : makeDefaultPins(idx);
+              if (!d || (d.kind !== "demo" && d.kind !== "video" && d.kind !== "image" && d.kind !== "mask")) throw new Error("bad-format");
+              var srcVerts = (Array.isArray(d.verts) && d.verts.length >= 3) ? d.verts : d.pins;
+              var itemVerts = (Array.isArray(srcVerts) && srcVerts.length >= 3 && srcVerts.every(function (p) { return p && typeof p.x === "number" && typeof p.y === "number"; }))
+                ? toVerts(d, idx) : makeDefaultPins(idx);
               if (d.kind === "demo") {
-                return { kind: "demo", name: d.name || "デモパターン（内蔵）", blob: null, bytes: 0, pins: itemPins, visible: d.visible !== false };
+                return { kind: "demo", name: d.name || "デモパターン（内蔵）", blob: null, bytes: 0, verts: itemVerts, visible: d.visible !== false };
+              }
+              if (d.kind === "mask") {
+                return { kind: "mask", name: d.name || "マスク", blob: null, bytes: 0, verts: itemVerts, visible: d.visible !== false };
               }
               if (typeof d.data !== "string" || !d.data) throw new Error("missing-data:" + (d.name || ""));
               var blob = base64ToBlob(d.data, d.mime || (d.kind === "video" ? "video/mp4" : "image/png"));
-              return { kind: d.kind, name: d.name || "素材", blob: blob, bytes: typeof d.bytes === "number" ? d.bytes : blob.size, pins: itemPins, visible: d.visible !== false };
+              return { kind: d.kind, name: d.name || "素材", blob: blob, bytes: typeof d.bytes === "number" ? d.bytes : blob.size, verts: itemVerts, visible: d.visible !== false };
             });
             var rec = {
               brightness: typeof parsed.brightness === "number" ? parsed.brightness : 1,
@@ -2047,8 +2245,10 @@
           // Reset only the selected material's corners, back to the
           // default quad for its slot in the list.
           if (activeItem) {
-            var fresh = makeDefaultPins(Math.max(0, mediaItems.indexOf(activeItem)));
-            for (var i = 0; i < 4; i++) { activeItem.pins[i].x = fresh[i].x; activeItem.pins[i].y = fresh[i].y; }
+            activeItem.verts = makeDefaultPins(Math.max(0, mediaItems.indexOf(activeItem)));
+            verts = activeItem.verts;
+            selectedPin = 0;
+            pinOwner = null;
           }
           layoutPins();
           scheduleAutosave();
